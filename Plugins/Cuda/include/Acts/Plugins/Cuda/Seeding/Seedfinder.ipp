@@ -132,9 +132,14 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   //  Algorithm 1. Doublet Search (DS)
   //------------------------------------
 
-  CudaScalar<int> nSpMcomp_cuda(new int(0));
-  CudaScalar<int> nSpBcompPerSpMMax_cuda(new int(0));
-  CudaScalar<int> nSpTcompPerSpMMax_cuda(new int(0));
+  int i1{0}, i2{0}, i3{0};
+
+  // CudaScalar<int> nSpMcomp_cuda(new int(0));
+  // CudaScalar<int> nSpBcompPerSpMMax_cuda(new int(0));
+  // CudaScalar<int> nSpTcompPerSpMMax_cuda(new int(0));
+  CudaScalar<int> nSpMcomp_cuda(&i1);
+  CudaScalar<int> nSpBcompPerSpMMax_cuda(&i2);
+  CudaScalar<int> nSpTcompPerSpMMax_cuda(&i3);
   CudaVector<int> nSpBcompPerSpM_cuda(nSpM);
   nSpBcompPerSpM_cuda.zeros();
   CudaVector<int> nSpTcompPerSpM_cuda(nSpM);
@@ -147,6 +152,8 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
 
   dim3 DS_BlockSize = m_config.maxBlockSize;
   dim3 DS_GridSize(nSpM, 1, 1);
+
+//  std::cout << "bcompindex: " << nSpB << " " << nSpM << " " << nSpB*nSpM << std::endl;
 
   searchDoublet(DS_GridSize, DS_BlockSize, nSpM_cuda.get(), spMmat_cuda.get(),
                 nSpB_cuda.get(), spBmat_cuda.get(), nSpT_cuda.get(),
@@ -191,6 +198,9 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
       spMcompMat_cuda.get(), spBcompMatPerSpM_cuda.get(),
       circBcompMatPerSpM_cuda.get(), spTcompMatPerSpM_cuda.get(),
       circTcompMatPerSpM_cuda.get());
+
+
+
 
   //------------------------------------------------------
   //  Algorithm 3. Triplet Search (TS) & Seed filtering

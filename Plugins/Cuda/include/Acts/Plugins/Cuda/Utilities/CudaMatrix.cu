@@ -30,6 +30,7 @@ class CudaMatrix {
     m_setSize(nRows, nCols);
     ACTS_CUDA_ERROR_CHECK(
         cudaMalloc((var_t**)&m_devPtr, m_nRows * m_nCols * sizeof(var_t)));
+    zeros();
   }
 
   CudaMatrix(size_t nRows, size_t nCols, var_t* mat) {

@@ -23,7 +23,7 @@ class CpuScalar {
     if (pinned == 0) {
       m_hostPtr = new var_t[1];
     } else if (pinned == 1) {
-      cudaMallocHost(&m_hostPtr, sizeof(var_t));
+      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
     }
   }
 
@@ -32,17 +32,17 @@ class CpuScalar {
     if (pinned == 0) {
       m_hostPtr = new var_t[1];
     } else if (pinned == 1) {
-      cudaMallocHost(&m_hostPtr, sizeof(var_t));
+      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
     }
-    cudaMemcpy(m_hostPtr, cuScalar->get(), sizeof(var_t),
-               cudaMemcpyDeviceToHost);
+    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_hostPtr, cuScalar->get(), sizeof(var_t),
+                                     cudaMemcpyDeviceToHost));
   }
 
   ~CpuScalar() {
     if (!m_pinned) {
       delete m_hostPtr;
     } else if (m_pinned && m_hostPtr) {
-      cudaFreeHost(m_hostPtr);
+      ACTS_CUDA_ERROR_CHECK(cudaFreeHost(m_hostPtr));
     }
   }
 

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "Acts/Plugins/Cuda/Utilities/CpuScalar.hpp"
+#include "Acts/Plugins/Cuda/Utilities/MSG.hpp"
 
 #include <iostream>
 #include <memory>
@@ -16,6 +17,21 @@
 #include "CudaUtils.cu"
 #include "cuda.h"
 #include "cuda_runtime.h"
+#include <cxxabi.h>
+#include <thread>
+
+template<typename T>
+std::string type_name()
+{
+    int status;
+    std::string tname = typeid(T).name();
+    char *demangled_name = abi::__cxa_demangle(tname.c_str(), NULL, NULL, &status);
+    if(status == 0) {
+        tname = demangled_name;
+        std::free(demangled_name);
+    }   
+    return tname;
+}
 
 namespace Acts {
 
@@ -30,13 +46,27 @@ class CudaScalar {
   }
 
   CudaScalar(var_t* scalar) {
+    // MSG(  "CUS " << std::this_thread::get_id() << "  "
+    //       << type_name<var_t>()
+    //       << "  " << scalar << " " << *scalar );
     ACTS_CUDA_ERROR_CHECK(cudaMalloc((var_t**)&m_devPtr, sizeof(var_t)));
     ACTS_CUDA_ERROR_CHECK(
         cudaMemcpy(m_devPtr, scalar, sizeof(var_t), cudaMemcpyHostToDevice));
   }
 
   CudaScalar(const var_t* scalar) {
+    // std::cout << "---> CUS " << std::this_thread::get_id() << "  "
+    //           << type_name<var_t>()
+    //           << "  " << scalar << " " << *scalar << std::endl;
+    // MSG(  "CUSc " << std::this_thread::get_id() << "  "
+    //       << type_name<var_t>()
+    //       << "  " << scalar << " " << *scalar );
+
     ACTS_CUDA_ERROR_CHECK(cudaMalloc((var_t**)&m_devPtr, sizeof(var_t)));
+    if (m_devPtr == nullptr) {
+      MSG("devprt == 0!");
+      throw std::bad_alloc();
+    }
     ACTS_CUDA_ERROR_CHECK(
         cudaMemcpy(m_devPtr, scalar, sizeof(var_t), cudaMemcpyHostToDevice));
   }
@@ -48,6 +78,6 @@ class CudaScalar {
   void zeros() { cudaMemset(m_devPtr, 0, sizeof(var_t)); }
 
  private:
-  var_t* m_devPtr;
+  var_t* m_devPtr{nullptr};
 };
 }  // namespace Acts

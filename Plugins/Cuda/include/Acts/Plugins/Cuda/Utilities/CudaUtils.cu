@@ -20,6 +20,7 @@ inline void cudaAssert(cudaError_t code, const char *file, int line,
   if (code != cudaSuccess) {
     fprintf(stderr, "CUDAassert: %s %s %d\n", cudaGetErrorString(code), file,
             line);
+    throw std::bad_alloc();
     if (abort)
       exit(code);
   }

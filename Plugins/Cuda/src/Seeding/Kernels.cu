@@ -254,6 +254,7 @@ __global__ void cuSearchDoublet(
       offset += blockDim.x;
     }
   }
+  //  printf("cud: %d %d %d %d\n",*nSpB,*nSpM,(*nSpB)*(*nSpM),BcompIndex[32]);
 }
 
 __global__ void cuTransformCoordinate(

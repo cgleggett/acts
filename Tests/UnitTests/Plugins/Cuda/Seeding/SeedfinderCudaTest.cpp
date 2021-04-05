@@ -22,12 +22,60 @@
 #include <iostream>
 #include <sstream>
 #include <utility>
+#include <thread>
 
 #include <boost/type_erasure/any_cast.hpp>
 #include <cuda_profiler_api.h>
 
 #include "ATLASCuts.hpp"
 #include "SpacePoint.hpp"
+
+
+struct work {
+  work(){};
+  work(int cid, int it, int nthr, bool dc, bool dg, bool ag, bool q,
+       int sk, int ng, int nt, int na, cudaDeviceProp p, const std::string& f):
+    cudaDeviceID(cid), iThread(it), nThreads(nthr), do_cpu(dc), do_gpu(dg), allgroup(ag), quiet(q),
+    skip(sk), nGroupToIterate(ng), nTrplPerSpBLimit(nt), nAvgTrplPerSpBLimit(na),
+    cudaProp(p), file(f) {
+  };
+  
+  int cudaDeviceID{0};
+  int iThread {0};
+  int nThreads {0};
+
+  bool do_cpu{true};
+  bool do_gpu{true};
+  bool allgroup{false};
+  bool quiet{true};
+
+  int skip{0};
+  int nGroupToIterate{500};
+  int nTrplPerSpBLimit{100};
+  int nAvgTrplPerSpBLimit{2};
+
+  cudaDeviceProp cudaProp{};
+
+  std::string file{"sp.txt"};
+};
+  
+
+int proc(work w);
+
+class sdf_task {
+public:
+
+  sdf_task(work w) : m_work(w) {};
+  
+  void operator() () const {
+    proc(m_work);
+  }
+
+  work m_work;
+  
+};
+  
+
 
 std::vector<const SpacePoint*> readFile(std::string filename) {
   std::string line;
@@ -70,13 +118,14 @@ std::vector<const SpacePoint*> readFile(std::string filename) {
 }
 
 int main(int argc, char** argv) {
-  auto start_pre = std::chrono::system_clock::now();
 
   std::string file{"sp.txt"};
   bool help(false);
   bool quiet(false);
   bool allgroup(false);
-  bool do_cpu(true);
+  bool do_cpu(false);
+  bool do_gpu(false);
+  int nThread = 1;
   int nGroupToIterate = 500;
   int skip = 0;
   int deviceID = 0;
@@ -84,7 +133,7 @@ int main(int argc, char** argv) {
   int nAvgTrplPerSpBLimit = 2;
 
   int opt;
-  while ((opt = getopt(argc, argv, "haf:n:s:d:l:m:qG")) != -1) {
+  while ((opt = getopt(argc, argv, "haf:n:s:d:l:m:N:qCG")) != -1) {
     switch (opt) {
       case 'a':
         allgroup = true;
@@ -107,11 +156,17 @@ int main(int argc, char** argv) {
       case 'm':
         nTrplPerSpBLimit = atoi(optarg);
         break;
+      case 'N':
+        nThread = atoi(optarg);
+        break;
       case 'q':
         quiet = true;
         break;
+      case 'C':
+        do_cpu = true;
+        break;
       case 'G':
-        do_cpu = false;
+        do_gpu = true;
         break;
       case 'h':
         help = true;
@@ -150,9 +205,50 @@ int main(int argc, char** argv) {
     }
   }
 
+  
   std::string devName;
   ACTS_CUDA_ERROR_CHECK(cudaSetDevice(deviceID));
 
+  cudaDeviceProp prop;
+  ACTS_CUDA_ERROR_CHECK(cudaGetDeviceProperties(&prop, deviceID));
+  printf("\n GPU Device %d: \"%s\" with compute capability %d.%d\n\n", deviceID,
+         prop.name, prop.major, prop.minor);
+  
+  std::vector<std::thread> tv;
+  for (int i=0; i<nThread; ++i) {
+    work w(deviceID, i, nThread, do_cpu, do_gpu, allgroup, quiet, skip,
+           nGroupToIterate, nTrplPerSpBLimit, nAvgTrplPerSpBLimit, prop, file);
+
+    tv.push_back( std::thread{ sdf_task(w) } );
+  }
+
+  for (auto &v: tv) {
+    v.join();
+  }
+
+  
+  return 0;
+}
+
+/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+
+int proc(work w) {
+
+  const std::string& file = w.file;
+  int deviceID = w.cudaDeviceID;
+  
+  bool allgroup = w.allgroup;
+  bool do_cpu = w.do_cpu;
+  bool do_gpu = w.do_gpu;
+  bool quiet = w.quiet;
+  int skip = w.skip;
+  int nGroupToIterate = w.nGroupToIterate;
+  int nTrplPerSpBLimit = w.nTrplPerSpBLimit;
+  int nAvgTrplPerSpBLimit = w.nAvgTrplPerSpBLimit;
+
+  
+  auto start_pre = std::chrono::system_clock::now();
+  
   std::ifstream f(file);
   if (!f.good()) {
     std::cerr << "input file \"" << file << "\" does not exist\n";
@@ -185,11 +281,9 @@ int main(int argc, char** argv) {
   config.impactMax = 10.;
 
   // cuda
-  cudaDeviceProp prop;
-  ACTS_CUDA_ERROR_CHECK(cudaGetDeviceProperties(&prop, deviceID));
-  printf("\n GPU Device %d: \"%s\" with compute capability %d.%d\n\n", deviceID,
-         prop.name, prop.major, prop.minor);
-  config.maxBlockSize = prop.maxThreadsPerBlock;
+  cudaDeviceProp prop = w.cudaProp;
+
+  config.maxBlockSize = prop.maxThreadsPerBlock / w.nThreads;
   config.nTrplPerSpBLimit = nTrplPerSpBLimit;
   config.nAvgTrplPerSpBLimit = nAvgTrplPerSpBLimit;
 
@@ -274,15 +368,17 @@ int main(int argc, char** argv) {
   std::vector<std::vector<Acts::Seed<SpacePoint>>> seedVector_cuda;
   groupIt = spGroup.begin();
 
-  for (int i_s = 0; i_s < skip; i_s++)
-    ++groupIt;
-  for (; !(groupIt == spGroup.end()); ++groupIt) {
-    seedVector_cuda.push_back(seedfinder_cuda.createSeedsForGroup(
-        groupIt.bottom(), groupIt.middle(), groupIt.top()));
-    group_count++;
-    if (allgroup == false) {
-      if (group_count >= nGroupToIterate)
-        break;
+  if (do_gpu) {
+    for (int i_s = 0; i_s < skip; i_s++)
+      ++groupIt;
+    for (; !(groupIt == spGroup.end()); ++groupIt) {
+      seedVector_cuda.push_back(seedfinder_cuda.createSeedsForGroup(
+                                                                    groupIt.bottom(), groupIt.middle(), groupIt.top()));
+      group_count++;
+      if (allgroup == false) {
+        if (group_count >= nGroupToIterate)
+          break;
+      }
     }
   }
   auto end_cuda = std::chrono::system_clock::now();
@@ -300,14 +396,16 @@ int main(int argc, char** argv) {
             << std::endl;
   std::cout << "Seedfinding_Time  " << std::setw(11)
             << (do_cpu ? std::to_string(cpuTime) : "") << "  " << std::setw(11)
-            << cudaTime << "  " << std::setw(11)
-            << (do_cpu ? std::to_string(cpuTime / cudaTime) : "") << std::endl;
+            << (do_gpu ? std::to_string(cudaTime) : "") << "  " << std::setw(11)
+    //            << cudaTime << "  " << std::setw(11)
+            << ((do_cpu&&do_gpu) ? std::to_string(cpuTime / cudaTime) : "") << std::endl;
   double wallTime_cpu = cpuTime + preprocessTime;
   double wallTime_cuda = cudaTime + preprocessTime;
   std::cout << "Wall_time         " << std::setw(11)
-            << (do_cpu ? std::to_string(wallTime_cpu) : "") << "  "
-            << std::setw(11) << wallTime_cuda << "  " << std::setw(11)
-            << (do_cpu ? std::to_string(wallTime_cpu / wallTime_cuda) : "")
+            << (do_cpu ? std::to_string(wallTime_cpu) : "") << "  " << std::setw(11) 
+            << (do_gpu ? std::to_string(wallTime_cuda) : "") << "  " << std::setw(11) 
+    //            << std::setw(11) << wallTime_cuda << "  " << std::setw(11)
+            << ( (do_cpu&&do_gpu) ? std::to_string(wallTime_cpu / wallTime_cuda) : "")
             << std::endl;
   std::cout << "-----------------------------------------------------------"
             << std::endl;
@@ -326,6 +424,11 @@ int main(int argc, char** argv) {
   std::cout << "Number of Seeds (CPU | CUDA): " << nSeed_cpu << " | "
             << nSeed_cuda << std::endl;
 
+  if (! (do_gpu&&do_cpu) ) {
+    return(0);
+  }
+ 
+  
   int nMatch = 0;
 
   for (size_t i = 0; i < seedVector_cpu.size(); i++) {
@@ -354,17 +457,19 @@ int main(int argc, char** argv) {
       seeds_cuda.push_back(seed_cuda);
     }
 
-    for (auto seed : seeds_cpu) {
-      for (auto other : seeds_cuda) {
-        if (seed[0] == other[0] && seed[1] == other[1] && seed[2] == other[2]) {
-          nMatch++;
-          break;
+    if (do_cpu && do_gpu) {
+      for (auto seed : seeds_cpu) {
+        for (auto other : seeds_cuda) {
+          if (seed[0] == other[0] && seed[1] == other[1] && seed[2] == other[2]) {
+            nMatch++;
+            break;
+          }
         }
       }
     }
   }
 
-  if (do_cpu) {
+  if (do_cpu && do_gpu) {
     std::cout << nMatch << " seeds are matched" << std::endl;
     std::cout << "Matching rate: " << float(nMatch) / nSeed_cpu * 100 << "%"
               << std::endl;
@@ -392,21 +497,23 @@ int main(int argc, char** argv) {
 
       std::cout << std::endl;
     }
-    std::cout << "CUDA Seed result:" << std::endl;
+    if (do_gpu) {
+      std::cout << "CUDA Seed result:" << std::endl;
 
-    for (auto& regionVec : seedVector_cuda) {
-      for (size_t i = 0; i < regionVec.size(); i++) {
-        const Acts::Seed<SpacePoint>* seed = &regionVec[i];
-        const SpacePoint* sp = seed->sp()[0];
-        std::cout << " (" << sp->x() << ", " << sp->y() << ", " << sp->z()
-                  << ") ";
-        sp = seed->sp()[1];
-        std::cout << sp->surface << " (" << sp->x() << ", " << sp->y() << ", "
-                  << sp->z() << ") ";
-        sp = seed->sp()[2];
-        std::cout << sp->surface << " (" << sp->x() << ", " << sp->y() << ", "
-                  << sp->z() << ") ";
-        std::cout << std::endl;
+      for (auto& regionVec : seedVector_cuda) {
+        for (size_t i = 0; i < regionVec.size(); i++) {
+          const Acts::Seed<SpacePoint>* seed = &regionVec[i];
+          const SpacePoint* sp = seed->sp()[0];
+          std::cout << " (" << sp->x() << ", " << sp->y() << ", " << sp->z()
+                    << ") ";
+          sp = seed->sp()[1];
+          std::cout << sp->surface << " (" << sp->x() << ", " << sp->y() << ", "
+                    << sp->z() << ") ";
+          sp = seed->sp()[2];
+          std::cout << sp->surface << " (" << sp->x() << ", " << sp->y() << ", "
+                    << sp->z() << ") ";
+          std::cout << std::endl;
+        }
       }
     }
   }
