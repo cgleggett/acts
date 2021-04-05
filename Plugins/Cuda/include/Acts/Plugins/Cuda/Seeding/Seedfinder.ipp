@@ -10,6 +10,8 @@
 #include <cmath>
 #include <numeric>
 #include <type_traits>
+#include "Acts/Plugins/Cuda/Seeding/Work.hpp"
+
 
 namespace Acts {
 
@@ -39,7 +41,7 @@ template <typename external_spacepoint_t>
 template <typename sp_range_t>
 std::vector<Seed<external_spacepoint_t>>
 Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
-    sp_range_t bottomSPs, sp_range_t middleSPs, sp_range_t topSPs) const {
+    sp_range_t bottomSPs, sp_range_t middleSPs, sp_range_t topSPs, Work& w) const {
   std::vector<Seed<external_spacepoint_t>> outputVec;
 
   // Get SeedfinderConfig values
@@ -164,7 +166,8 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
                 nSpBcompPerSpM_cuda.get(), nSpTcompPerSpM_cuda.get(),
                 McompIndex_cuda.get(), BcompIndex_cuda.get(),
                 tmpBcompIndex_cuda.get(), TcompIndex_cuda.get(),
-                tmpTcompIndex_cuda.get());
+                tmpTcompIndex_cuda.get(),
+                w );
 
   CpuScalar<int> nSpMcomp_cpu(&nSpMcomp_cuda);
   CpuScalar<int> nSpBcompPerSpMMax_cpu(&nSpBcompPerSpMMax_cuda);
@@ -197,7 +200,7 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
       spTmat_cuda.get(), nSpTcompPerSpMMax_cuda.get(), TcompIndex_cuda.get(),
       spMcompMat_cuda.get(), spBcompMatPerSpM_cuda.get(),
       circBcompMatPerSpM_cuda.get(), spTcompMatPerSpM_cuda.get(),
-      circTcompMatPerSpM_cuda.get());
+      circTcompMatPerSpM_cuda.get(), w);
 
 
 
@@ -222,11 +225,11 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   nTrplPerSpM_cpu.zeros();
   CpuMatrix<Triplet> TripletsPerSpM_cpu(nTrplPerSpMLimit, *nSpMcomp_cpu.get(),
                                         true);
-  cudaStream_t cuStream;
-  ACTS_CUDA_ERROR_CHECK(cudaStreamCreate(&cuStream));
+  // cudaStream_t cuStream;
+  // ACTS_CUDA_ERROR_CHECK(cudaStreamCreate(&cuStream));
 
   for (int i_m = 0; i_m <= *nSpMcomp_cpu.get(); i_m++) {
-    cudaStreamSynchronize(cuStream);
+    cudaStreamSynchronize(w.stream);
 
     // Search Triplet
     if (i_m < *nSpMcomp_cpu.get()) {
@@ -256,12 +259,12 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
           compatSeedLimit_cpu.get(), compatSeedLimit_cuda.get(),
           // output
           nTrplPerSpM_cuda.get(i_m), TripletsPerSpM_cuda.get(0, i_m),
-          &cuStream);
-      nTrplPerSpM_cpu.copyD2H(nTrplPerSpM_cuda.get(i_m), 1, i_m, &cuStream);
+          w);
+      nTrplPerSpM_cpu.copyD2H(nTrplPerSpM_cuda.get(i_m), 1, i_m, &w.stream);
 
       TripletsPerSpM_cpu.copyD2H(TripletsPerSpM_cuda.get(0, i_m),
                                  nTrplPerSpMLimit, nTrplPerSpMLimit * i_m,
-                                 &cuStream);
+                                 &w.stream);
     }
 
     if (i_m > 0) {
@@ -302,7 +305,7 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
       m_config.seedFilter->filterSeeds_1SpFixed(seedsPerSpM, outputVec);
     }
   }
-  ACTS_CUDA_ERROR_CHECK(cudaStreamDestroy(cuStream));
+  // ACTS_CUDA_ERROR_CHECK(cudaStreamDestroy(cuStream));
   return outputVec;
 }
 }  // namespace Acts

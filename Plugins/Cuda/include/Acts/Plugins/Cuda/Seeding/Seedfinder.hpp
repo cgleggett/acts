@@ -9,6 +9,7 @@
 #pragma once
 
 #include "Acts/Plugins/Cuda/Cuda.hpp"
+#include "Acts/Plugins/Cuda/Seeding/Work.hpp"
 #include "Acts/Plugins/Cuda/Seeding/Kernels.cuh"
 #include "Acts/Seeding/InternalSeed.hpp"
 #include "Acts/Seeding/InternalSpacePoint.hpp"
@@ -55,7 +56,7 @@ class Seedfinder<external_spacepoint_t, Acts::Cuda> {
   /// @return vector in which all found seeds for this group are stored.
   template <typename sp_range_t>
   std::vector<Seed<external_spacepoint_t> > createSeedsForGroup(
-      sp_range_t bottomSPs, sp_range_t middleSPs, sp_range_t topSPs) const;
+                                                                sp_range_t bottomSPs, sp_range_t middleSPs, sp_range_t topSPs, Work& w) const;
 
  private:
   Acts::SeedfinderConfig<external_spacepoint_t> m_config;

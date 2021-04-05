@@ -7,6 +7,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include "Acts/Plugins/Cuda/Seeding/Seedfinder.hpp"
+#include "Acts/Plugins/Cuda/Seeding/Work.hpp"
 #include "Acts/Seeding/BinFinder.hpp"
 #include "Acts/Seeding/BinnedSPGroup.hpp"
 #include "Acts/Seeding/InternalSeed.hpp"
@@ -29,49 +30,20 @@
 
 #include "ATLASCuts.hpp"
 #include "SpacePoint.hpp"
-
-
-struct work {
-  work(){};
-  work(int cid, int it, int nthr, bool dc, bool dg, bool ag, bool q,
-       int sk, int ng, int nt, int na, cudaDeviceProp p, const std::string& f):
-    cudaDeviceID(cid), iThread(it), nThreads(nthr), do_cpu(dc), do_gpu(dg), allgroup(ag), quiet(q),
-    skip(sk), nGroupToIterate(ng), nTrplPerSpBLimit(nt), nAvgTrplPerSpBLimit(na),
-    cudaProp(p), file(f) {
-  };
-  
-  int cudaDeviceID{0};
-  int iThread {0};
-  int nThreads {0};
-
-  bool do_cpu{true};
-  bool do_gpu{true};
-  bool allgroup{false};
-  bool quiet{true};
-
-  int skip{0};
-  int nGroupToIterate{500};
-  int nTrplPerSpBLimit{100};
-  int nAvgTrplPerSpBLimit{2};
-
-  cudaDeviceProp cudaProp{};
-
-  std::string file{"sp.txt"};
-};
   
 
-int proc(work w);
+int proc(Work &w);
 
 class sdf_task {
 public:
 
-  sdf_task(work w) : m_work(w) {};
+  sdf_task(Work &w) : m_work(w) {};
   
   void operator() () const {
     proc(m_work);
   }
 
-  work m_work;
+  Work &m_work;
   
 };
   
@@ -125,6 +97,7 @@ int main(int argc, char** argv) {
   bool allgroup(false);
   bool do_cpu(false);
   bool do_gpu(false);
+  bool do_timing(false);
   int nThread = 1;
   int nGroupToIterate = 500;
   int skip = 0;
@@ -133,7 +106,7 @@ int main(int argc, char** argv) {
   int nAvgTrplPerSpBLimit = 2;
 
   int opt;
-  while ((opt = getopt(argc, argv, "haf:n:s:d:l:m:N:qCG")) != -1) {
+  while ((opt = getopt(argc, argv, "haf:n:s:d:l:m:N:qCGT")) != -1) {
     switch (opt) {
       case 'a':
         allgroup = true;
@@ -167,6 +140,9 @@ int main(int argc, char** argv) {
         break;
       case 'G':
         do_gpu = true;
+        break;
+      case 'T':
+        do_timing = true;
         break;
       case 'h':
         help = true;
@@ -213,17 +189,41 @@ int main(int argc, char** argv) {
   ACTS_CUDA_ERROR_CHECK(cudaGetDeviceProperties(&prop, deviceID));
   printf("\n GPU Device %d: \"%s\" with compute capability %d.%d\n\n", deviceID,
          prop.name, prop.major, prop.minor);
+
+  std::vector<Work> vw;
+  for (int i=0; i<nThread; ++i) {
+    vw.push_back( Work(deviceID, i, nThread, do_cpu, do_gpu, allgroup, quiet, skip,
+                       nGroupToIterate, nTrplPerSpBLimit, nAvgTrplPerSpBLimit, prop, file) );
+    ACTS_CUDA_ERROR_CHECK(cudaStreamCreate(& vw.back().stream));
+    vw.back().doCudaTiming = do_timing;
+  }
   
   std::vector<std::thread> tv;
   for (int i=0; i<nThread; ++i) {
-    work w(deviceID, i, nThread, do_cpu, do_gpu, allgroup, quiet, skip,
-           nGroupToIterate, nTrplPerSpBLimit, nAvgTrplPerSpBLimit, prop, file);
-
-    tv.push_back( std::thread{ sdf_task(w) } );
+    tv.push_back( std::thread{ sdf_task(vw[i]) } );
   }
 
   for (auto &v: tv) {
     v.join();
+  }
+
+  if (do_timing) {
+    std::cout << "kernel timing in ms\n";
+    int i=0;
+    std::cout << "     doublet  transf   triplet\n";
+    float t1{0}, t2{0}, t3{0};
+    for (auto &v: vw) {
+      ++i;
+      ACTS_CUDA_ERROR_CHECK(cudaStreamDestroy( v.stream ));
+      printf("%3d:  %6.3f  %6.3f  %6.3f\n",i,v.timeDoubletCuda_ms, v.timeTransformCuda_ms,
+             v.timeTripletCuda_ms);
+      // std::cout << i << ": " << v.timeDoubletCuda_ms << "    " << v.timeTransformCuda_ms
+      //           << "    " << v.timeTripletCuda_ms << std::endl;
+      t1 += v.timeDoubletCuda_ms;
+      t2 += v.timeTransformCuda_ms;
+      t3 += v.timeTripletCuda_ms;
+    }
+    printf("avg:  %6.3f  %6.3f  %6.3f\n",t1/nThread,t2/nThread,t3/nThread);
   }
 
   
@@ -232,10 +232,10 @@ int main(int argc, char** argv) {
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-int proc(work w) {
+int proc(Work &w) {
 
   const std::string& file = w.file;
-  int deviceID = w.cudaDeviceID;
+  //  int deviceID = w.cudaDeviceID;
   
   bool allgroup = w.allgroup;
   bool do_cpu = w.do_cpu;
@@ -373,7 +373,7 @@ int proc(work w) {
       ++groupIt;
     for (; !(groupIt == spGroup.end()); ++groupIt) {
       seedVector_cuda.push_back(seedfinder_cuda.createSeedsForGroup(
-                                                                    groupIt.bottom(), groupIt.middle(), groupIt.top()));
+                                                                    groupIt.bottom(), groupIt.middle(), groupIt.top(),w));
       group_count++;
       if (allgroup == false) {
         if (group_count >= nGroupToIterate)

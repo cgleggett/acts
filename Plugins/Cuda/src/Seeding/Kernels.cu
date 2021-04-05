@@ -58,19 +58,37 @@ void searchDoublet(const dim3 grid, const dim3 block, const int* nSpM,
                    int* nSpBcompPerSpM_Max, int* nSpTcompPerSpM_Max,
                    int* nSpBcompPerSpM, int* nSpTcompPerSpM, int* McompIndex,
                    int* BcompIndex, int* tmpBcompIndex, int* TcompIndex,
-                   int* tmpTcompIndex) {
+                   int* tmpTcompIndex, Work& w) {
   if (grid.x == 0) {
     return;
   }
   // int sharedMemSize = (2*sizeof(int))*block.x + 2*sizeof(int);
   int sharedMemSize = 2 * sizeof(int);
 
-  cuSearchDoublet<<<grid, block, sharedMemSize>>>(
+  cudaEvent_t startc, stopc;  
+  if (w.doCudaTiming) {
+    cudaEventCreate(&startc);
+    cudaEventCreate(&stopc);
+    cudaEventRecord(startc,w.stream);
+  }
+  
+  cuSearchDoublet<<<grid, block, sharedMemSize, w.stream>>>(
       nSpM, spMmat, nSpB, spBmat, nSpT, spTmat, deltaRMin, deltaRMax,
       cotThetaMax, collisionRegionMin, collisionRegionMax, nSpMcomp,
       nSpBcompPerSpM_Max, nSpTcompPerSpM_Max, nSpBcompPerSpM, nSpTcompPerSpM,
       McompIndex, BcompIndex, tmpBcompIndex, TcompIndex, tmpTcompIndex);
   ACTS_CUDA_ERROR_CHECK(cudaGetLastError());
+
+  //  ACTS_CUDA_ERROR_CHECK( cudaStreamSynchronize(w.stream) );
+
+  if (w.doCudaTiming) {
+    cudaEventRecord(stopc,w.stream);
+    cudaEventSynchronize(stopc);
+    float t{0.};
+    cudaEventElapsedTime(&t, startc, stopc);
+    w.timeDoubletCuda_ms += t;
+  }
+
 }
 
 void transformCoordinate(const dim3 grid, const dim3 block, const int* nSpM,
@@ -81,17 +99,34 @@ void transformCoordinate(const dim3 grid, const dim3 block, const int* nSpM,
                          const int* nSpTcompPerSpM_Max, const int* TcompIndex,
                          float* spMcompMat, float* spBcompMatPerSpM,
                          float* circBcompMatPerSpM, float* spTcompMatPerSpM,
-                         float* circTcompMatPerSpM) {
+                         float* circTcompMatPerSpM, Work& w) {
   if (grid.x == 0) {
     return;
   }
   int sharedMemSize = sizeof(float) * 6;
-  cuTransformCoordinate<<<grid, block, sharedMemSize>>>(
+
+  cudaEvent_t startc, stopc;  
+  if (w.doCudaTiming) {
+    cudaEventCreate(&startc);
+    cudaEventCreate(&stopc);
+    cudaEventRecord(startc,w.stream);
+  }
+
+  cuTransformCoordinate<<<grid, block, sharedMemSize, w.stream>>>(
       nSpM, spMmat, McompIndex, nSpB, spBmat, nSpBcompPerSpM_Max, BcompIndex,
       nSpT, spTmat, nSpTcompPerSpM_Max, TcompIndex, spMcompMat,
       spBcompMatPerSpM, circBcompMatPerSpM, spTcompMatPerSpM,
       circTcompMatPerSpM);
   ACTS_CUDA_ERROR_CHECK(cudaGetLastError());
+  //  ACTS_CUDA_ERROR_CHECK( cudaStreamSynchronize(w.stream) );
+
+  if (w.doCudaTiming) {
+    cudaEventRecord(stopc,w.stream);
+    cudaEventSynchronize(stopc);
+    float t;
+    cudaEventElapsedTime(&t, startc, stopc);
+    w.timeTransformCuda_ms += t;
+  }
 }
 
 void searchTriplet(
@@ -108,15 +143,22 @@ void searchTriplet(
     const float* deltaInvHelixDiameter, const float* impactWeightFactor,
     const float* deltaRMin, const float* compatSeedWeight,
     const size_t* compatSeedLimit_cpu, const size_t* compatSeedLimit_cuda,
-    int* nTrplPerSpM, Triplet* TripletsPerSpM, cudaStream_t* stream) {
+    int* nTrplPerSpM, Triplet* TripletsPerSpM, Work& w) {
   if (grid.x == 0) {
     return;
   }
   int sharedMemSize = sizeof(Triplet) * (*nTrplPerSpBLimit_cpu);
   sharedMemSize += sizeof(float) * (*compatSeedLimit_cpu);
   sharedMemSize += sizeof(int);
+  
+  cudaEvent_t startc, stopc;  
+  if (w.doCudaTiming) {
+    cudaEventCreate(&startc);
+    cudaEventCreate(&stopc);
+    cudaEventRecord(startc,w.stream);
+  }
 
-  cuSearchTriplet<<<grid, block, sharedMemSize, *stream>>>(
+  cuSearchTriplet<<<grid, block, sharedMemSize, w.stream>>>(
       nSpTcompPerSpM_cuda, nSpMcomp, spMcompMat, nSpBcompPerSpM_Max, BcompIndex,
       circBcompMatPerSpM, nSpTcompPerSpM_Max, TcompIndex, spTcompMatPerSpM,
       circTcompMatPerSpM, maxScatteringAngle2, sigmaScattering,
@@ -125,6 +167,13 @@ void searchTriplet(
       deltaRMin, compatSeedWeight, compatSeedLimit_cuda, nTrplPerSpM,
       TripletsPerSpM);
   ACTS_CUDA_ERROR_CHECK(cudaGetLastError());
+  //  ACTS_CUDA_ERROR_CHECK( cudaStreamSynchronize(w.stream) );
+
+  if (w.doCudaTiming) {
+    cudaEventRecord(stopc,w.stream);
+    cudaEventSynchronize(stopc);
+    cudaEventElapsedTime(&w.timeTripletCuda_ms, startc, stopc);
+  }
 }
 
 }  // namespace Acts
