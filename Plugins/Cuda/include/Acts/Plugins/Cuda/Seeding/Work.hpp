@@ -36,7 +36,9 @@ struct Work {
   float timeDoubletCuda_ms{0.0};
   float timeTransformCuda_ms{0.0};
   float timeTripletCuda_ms{0.0};
-  
+  double timeSeedfinder{0.0};
+  int  nCalls{0};
+
   std::string file{"sp.txt"};
 };
 

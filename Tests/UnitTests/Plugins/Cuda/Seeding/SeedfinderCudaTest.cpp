@@ -24,6 +24,9 @@
 #include <sstream>
 #include <utility>
 #include <thread>
+#include <mutex>
+#include <queue>
+#include <filesystem>
 
 #include <boost/type_erasure/any_cast.hpp>
 #include <cuda_profiler_api.h>
@@ -37,13 +40,31 @@ int proc(Work &w);
 class sdf_task {
 public:
 
-  sdf_task(Work &w) : m_work(w) {};
+  sdf_task(Work &w, std::queue<std::string>* q=nullptr, std::mutex* m=nullptr) : m_work(w), m_que(q), m_mut(m) {};
   
   void operator() () const {
-    proc(m_work);
+    if (m_que != 0) {
+      while (true) {
+        {
+          std::lock_guard<std::mutex> lk(*m_mut);
+          if (m_que->size() == 0) {
+            return;
+          }          
+          m_work.file = m_que->front();
+          m_que->pop();
+        }
+        proc(m_work);
+      }
+    } else {
+      proc(m_work);
+    }
   }
 
   Work &m_work;
+  std::queue<std::string>* m_que {nullptr};
+  std::mutex* m_mut{nullptr};
+  
+  
   
 };
   
@@ -98,21 +119,26 @@ int main(int argc, char** argv) {
   bool do_cpu(false);
   bool do_gpu(false);
   bool do_timing(false);
-  int nThread = 1;
+  std::string fdir{};
+  int nThreads = 1;
   int nGroupToIterate = 500;
   int skip = 0;
   int deviceID = 0;
   int nTrplPerSpBLimit = 100;
   int nAvgTrplPerSpBLimit = 2;
+  size_t nFiles = 0;
 
   int opt;
-  while ((opt = getopt(argc, argv, "haf:n:s:d:l:m:N:qCGT")) != -1) {
+  while ((opt = getopt(argc, argv, "haf:n:s:d:l:m:N:F:qCGTD:")) != -1) {
     switch (opt) {
       case 'a':
         allgroup = true;
         break;
       case 'f':
         file = optarg;
+        break;
+      case 'D':
+        fdir = optarg;
         break;
       case 'n':
         nGroupToIterate = atoi(optarg);
@@ -130,7 +156,10 @@ int main(int argc, char** argv) {
         nTrplPerSpBLimit = atoi(optarg);
         break;
       case 'N':
-        nThread = atoi(optarg);
+        nThreads = atoi(optarg);
+        break;
+      case 'F':
+        nFiles = atoi(optarg);
         break;
       case 'q':
         quiet = true;
@@ -181,6 +210,25 @@ int main(int argc, char** argv) {
     }
   }
 
+  std::queue<std::string>* fque(nullptr);
+  std::mutex* fmut(nullptr);
+  if (fdir != "") {
+    fque = new std::queue<std::string>;
+    fmut = new std::mutex;
+    
+    for (const auto& ff : std::filesystem::directory_iterator(fdir))  {
+      std::string fps = ff.path();
+      //      std::cout << ff.path() << std::endl;
+      std::ifstream ifs(ff.path());
+      if (ifs.is_open()) {
+        fque->push(ff.path());
+        std::cout << "--> will proc " << fps << std::endl;
+      }
+      if (fque->size() >= nFiles) {
+        break;
+      }
+    }
+  }
   
   std::string devName;
   ACTS_CUDA_ERROR_CHECK(cudaSetDevice(deviceID));
@@ -191,16 +239,16 @@ int main(int argc, char** argv) {
          prop.name, prop.major, prop.minor);
 
   std::vector<Work> vw;
-  for (int i=0; i<nThread; ++i) {
-    vw.push_back( Work(deviceID, i, nThread, do_cpu, do_gpu, allgroup, quiet, skip,
+  for (int i=0; i<nThreads; ++i) {
+    vw.push_back( Work(deviceID, i, nThreads, do_cpu, do_gpu, allgroup, quiet, skip,
                        nGroupToIterate, nTrplPerSpBLimit, nAvgTrplPerSpBLimit, prop, file) );
     ACTS_CUDA_ERROR_CHECK(cudaStreamCreate(& vw.back().stream));
     vw.back().doCudaTiming = do_timing;
   }
   
   std::vector<std::thread> tv;
-  for (int i=0; i<nThread; ++i) {
-    tv.push_back( std::thread{ sdf_task(vw[i]) } );
+  for (int i=0; i<nThreads; ++i) {
+    tv.push_back( std::thread{ sdf_task(vw[i], fque, fmut) } );
   }
 
   for (auto &v: tv) {
@@ -210,20 +258,19 @@ int main(int argc, char** argv) {
   if (do_timing) {
     std::cout << "kernel timing in ms\n";
     int i=0;
-    std::cout << "     doublet  transf   triplet\n";
-    float t1{0}, t2{0}, t3{0};
+    std::cout << "     doublet  transf   triplet  cudaSF\n";
+    float t1{0}, t2{0}, t3{0}, t4{0};
     for (auto &v: vw) {
       ++i;
       ACTS_CUDA_ERROR_CHECK(cudaStreamDestroy( v.stream ));
-      printf("%3d:  %6.3f  %6.3f  %6.3f\n",i,v.timeDoubletCuda_ms, v.timeTransformCuda_ms,
-             v.timeTripletCuda_ms);
-      // std::cout << i << ": " << v.timeDoubletCuda_ms << "    " << v.timeTransformCuda_ms
-      //           << "    " << v.timeTripletCuda_ms << std::endl;
+      printf("%3d:  %6.3f  %6.3f  %6.3f   %6.3f\n",i,v.timeDoubletCuda_ms, v.timeTransformCuda_ms,
+             v.timeTripletCuda_ms, v.timeSeedfinder/v.nCalls);
       t1 += v.timeDoubletCuda_ms;
       t2 += v.timeTransformCuda_ms;
       t3 += v.timeTripletCuda_ms;
+      t4 += v.timeSeedfinder/v.nCalls;
     }
-    printf("avg:  %6.3f  %6.3f  %6.3f\n",t1/nThread,t2/nThread,t3/nThread);
+    printf("avg:  %6.3f  %6.3f  %6.3f   %6.3f\n",t1/nThreads,t2/nThreads,t3/nThreads, t4/nThreads);
   }
 
   
@@ -246,6 +293,7 @@ int proc(Work &w) {
   int nTrplPerSpBLimit = w.nTrplPerSpBLimit;
   int nAvgTrplPerSpBLimit = w.nAvgTrplPerSpBLimit;
 
+  ++ w.nCalls;
   
   auto start_pre = std::chrono::system_clock::now();
   
@@ -258,6 +306,7 @@ int proc(Work &w) {
   std::vector<const SpacePoint*> spVec = readFile(file);
 
   std::cout << "read " << spVec.size() << " SP from file " << file << std::endl;
+  //  MSG( "read " << spVec.size() << " SP from file " << file );
 
   // Set seed finder configuration
   Acts::SeedfinderConfig<SpacePoint> config;
@@ -362,7 +411,8 @@ int proc(Work &w) {
   //----------- CUDA ----------//
 
   cudaProfilerStart();
-  auto start_cuda = std::chrono::system_clock::now();
+  //  auto start_cuda = std::chrono::system_clock::now();
+  auto start_cuda = std::chrono::high_resolution_clock::now();
 
   group_count = 0;
   std::vector<std::vector<Acts::Seed<SpacePoint>>> seedVector_cuda;
@@ -381,9 +431,11 @@ int proc(Work &w) {
       }
     }
   }
-  auto end_cuda = std::chrono::system_clock::now();
+  //  auto end_cuda = std::chrono::system_clock::now();
+  auto end_cuda = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsec_cuda = end_cuda - start_cuda;
   double cudaTime = elapsec_cuda.count();
+  w.timeSeedfinder += cudaTime;
 
   cudaProfilerStop();
   std::cout << "Analyzed " << group_count << " groups for CUDA" << std::endl;
