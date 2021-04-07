@@ -42,29 +42,34 @@ template <typename external_spacepoint_t>
 template <typename sp_range_t>
 std::vector<Seed<external_spacepoint_t>>
 Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
-    sp_range_t bottomSPs, sp_range_t middleSPs, sp_range_t topSPs, Work& w) const {
+    sp_range_t bottomSPs, sp_range_t middleSPs, sp_range_t topSPs, Work& w,
+    GPUStructs::Config* scd) const {
   std::vector<Seed<external_spacepoint_t>> outputVec;
 
   // Get SeedfinderConfig values
-  CudaScalar<float> deltaRMin_cuda(&m_config.deltaRMin,&w.stream);
-  CudaScalar<float> deltaRMax_cuda(&m_config.deltaRMax,&w.stream);
-  CudaScalar<float> cotThetaMax_cuda(&m_config.cotThetaMax,&w.stream);
-  CudaScalar<float> collisionRegionMin_cuda(&m_config.collisionRegionMin,&w.stream);
-  CudaScalar<float> collisionRegionMax_cuda(&m_config.collisionRegionMax,&w.stream);
-  CudaScalar<float> maxScatteringAngle2_cuda(&m_config.maxScatteringAngle2,&w.stream);
-  CudaScalar<float> sigmaScattering_cuda(&m_config.sigmaScattering,&w.stream);
-  CudaScalar<float> minHelixDiameter2_cuda(&m_config.minHelixDiameter2,&w.stream);
-  CudaScalar<float> pT2perRadius_cuda(&m_config.pT2perRadius,&w.stream);
-  CudaScalar<float> impactMax_cuda(&m_config.impactMax,&w.stream);
-  const auto seedFilterConfig = m_config.seedFilter->getSeedFilterConfig();
-  CudaScalar<float> deltaInvHelixDiameter_cuda(
-      &seedFilterConfig.deltaInvHelixDiameter,&w.stream);
-  CudaScalar<float> impactWeightFactor_cuda(
-      &seedFilterConfig.impactWeightFactor,&w.stream);
-  CudaScalar<float> filterDeltaRMin_cuda(&seedFilterConfig.deltaRMin,&w.stream);
-  CudaScalar<float> compatSeedWeight_cuda(&seedFilterConfig.compatSeedWeight,&w.stream);
-  CudaScalar<size_t> compatSeedLimit_cuda(&seedFilterConfig.compatSeedLimit,&w.stream);
-  CpuScalar<size_t> compatSeedLimit_cpu(&compatSeedLimit_cuda);
+//  const auto seedFilterConfig = m_config.seedFilter->getSeedFilterConfig();
+
+  // CudaScalar<float> deltaRMin_cuda(&m_config.deltaRMin,&w.stream);
+  // CudaScalar<float> deltaRMax_cuda(&m_config.deltaRMax,&w.stream);
+  // CudaScalar<float> cotThetaMax_cuda(&m_config.cotThetaMax,&w.stream);
+  // CudaScalar<float> collisionRegionMin_cuda(&m_config.collisionRegionMin,&w.stream);
+  // CudaScalar<float> collisionRegionMax_cuda(&m_config.collisionRegionMax,&w.stream);
+//  CudaScalar<float> maxScatteringAngle2_cuda(&m_config.maxScatteringAngle2,&w.stream);
+//  CudaScalar<float> sigmaScattering_cuda(&m_config.sigmaScattering,&w.stream);
+//  CudaScalar<float> minHelixDiameter2_cuda(&m_config.minHelixDiameter2,&w.stream);
+//  CudaScalar<float> pT2perRadius_cuda(&m_config.pT2perRadius,&w.stream);
+//  CudaScalar<float> impactMax_cuda(&m_config.impactMax,&w.stream);
+  // CudaScalar<float> deltaInvHelixDiameter_cuda(
+  //     &seedFilterConfig.deltaInvHelixDiameter,&w.stream);
+  // CudaScalar<float> impactWeightFactor_cuda(
+  //     &seedFilterConfig.impactWeightFactor,&w.stream);
+  // CudaScalar<float> filterDeltaRMin_cuda(&seedFilterConfig.deltaRMin,&w.stream);
+  // CudaScalar<float> compatSeedWeight_cuda(&seedFilterConfig.compatSeedWeight,&w.stream);
+  // CudaScalar<size_t> compatSeedLimit_cuda(&seedFilterConfig.compatSeedLimit,&w.stream);
+
+//  CpuScalar<size_t> compatSeedLimit_cpu(&compatSeedLimit_cuda);
+  CpuScalar<size_t> compatSeedLimit_cpu(&scd->compatSeedLimit, &w.stream);
+  
   //---------------------------------
   // Algorithm 0. Matrix Flattening
   //---------------------------------
@@ -165,17 +170,30 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
 
 //  std::cout << "bcompindex: " << nSpB << " " << nSpM << " " << nSpB*nSpM << std::endl;
 
+  // searchDoublet(DS_GridSize, DS_BlockSize, nSpM_cuda.get(), spMmat_cuda.get(),
+  //               nSpB_cuda.get(), spBmat_cuda.get(), nSpT_cuda.get(),
+  //               spTmat_cuda.get(), deltaRMin_cuda.get(), deltaRMax_cuda.get(),
+  //               cotThetaMax_cuda.get(), collisionRegionMin_cuda.get(),
+  //               collisionRegionMax_cuda.get(), nSpMcomp_cuda.get(),
+  //               nSpBcompPerSpMMax_cuda.get(), nSpTcompPerSpMMax_cuda.get(),
+  //               nSpBcompPerSpM_cuda.get(), nSpTcompPerSpM_cuda.get(),
+  //               McompIndex_cuda.get(), BcompIndex_cuda.get(),
+  //               tmpBcompIndex_cuda.get(), TcompIndex_cuda.get(),
+  //               tmpTcompIndex_cuda.get(),
+  //               w );
+
   searchDoublet(DS_GridSize, DS_BlockSize, nSpM_cuda.get(), spMmat_cuda.get(),
                 nSpB_cuda.get(), spBmat_cuda.get(), nSpT_cuda.get(),
-                spTmat_cuda.get(), deltaRMin_cuda.get(), deltaRMax_cuda.get(),
-                cotThetaMax_cuda.get(), collisionRegionMin_cuda.get(),
-                collisionRegionMax_cuda.get(), nSpMcomp_cuda.get(),
+                spTmat_cuda.get(), &scd->deltaRMin, &scd->deltaRMax,
+                &scd->cotThetaMax, &scd->collisionRegionMin,
+                &scd->collisionRegionMax, nSpMcomp_cuda.get(),
                 nSpBcompPerSpMMax_cuda.get(), nSpTcompPerSpMMax_cuda.get(),
                 nSpBcompPerSpM_cuda.get(), nSpTcompPerSpM_cuda.get(),
                 McompIndex_cuda.get(), BcompIndex_cuda.get(),
                 tmpBcompIndex_cuda.get(), TcompIndex_cuda.get(),
                 tmpTcompIndex_cuda.get(),
                 w );
+
 
   CpuScalar<int> nSpMcomp_cpu(&nSpMcomp_cuda);
   CpuScalar<int> nSpBcompPerSpMMax_cpu(&nSpBcompPerSpMMax_cuda);
@@ -258,13 +276,13 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
           spTcompMatPerSpM_cuda.get(0, 6 * i_m),
           circTcompMatPerSpM_cuda.get(0, 6 * i_m),
           // Seed finder config
-          maxScatteringAngle2_cuda.get(), sigmaScattering_cuda.get(),
-          minHelixDiameter2_cuda.get(), pT2perRadius_cuda.get(),
-          impactMax_cuda.get(), nTrplPerSpMLimit_cuda.get(),
+          &scd->maxScatteringAngle2, &scd->sigmaScattering,
+          &scd->minHelixDiameter2, &scd->pT2perRadius,
+          &scd->impactMax, nTrplPerSpMLimit_cuda.get(),
           nTrplPerSpBLimit_cpu.get(), nTrplPerSpBLimit_cuda.get(),
-          deltaInvHelixDiameter_cuda.get(), impactWeightFactor_cuda.get(),
-          filterDeltaRMin_cuda.get(), compatSeedWeight_cuda.get(),
-          compatSeedLimit_cpu.get(), compatSeedLimit_cuda.get(),
+          &scd->deltaInvHelixDiameter, &scd->impactWeightFactor,
+          &scd->filterDeltaRMin, &scd->compatSeedWeight,
+          compatSeedLimit_cpu.get(), &scd->compatSeedLimit,
           // output
           nTrplPerSpM_cuda.get(i_m), TripletsPerSpM_cuda.get(0, i_m),
           w);

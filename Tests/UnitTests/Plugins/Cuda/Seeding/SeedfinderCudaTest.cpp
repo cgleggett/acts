@@ -427,6 +427,34 @@ int proc(Work &w) {
   //  auto start_cuda = std::chrono::system_clock::now();
   auto start_cuda = std::chrono::high_resolution_clock::now();
 
+
+  GPUStructs::Config sch;
+  const auto seedFilterConfig = seedfinder_cuda.getConfig().seedFilter->getSeedFilterConfig();
+
+  sch.deltaRMin = seedfinder_cuda.getConfig().deltaRMin;
+  sch.deltaRMax = seedfinder_cuda.getConfig().deltaRMax;
+  sch.cotThetaMax = seedfinder_cuda.getConfig().cotThetaMax;
+  sch.collisionRegionMin = seedfinder_cuda.getConfig().collisionRegionMin;
+  sch.collisionRegionMax = seedfinder_cuda.getConfig().collisionRegionMax;
+  sch.maxScatteringAngle2 = seedfinder_cuda.getConfig().maxScatteringAngle2;
+  sch.sigmaScattering = seedfinder_cuda.getConfig().sigmaScattering;
+  sch.minHelixDiameter2 = seedfinder_cuda.getConfig().minHelixDiameter2;
+  sch.pT2perRadius = seedfinder_cuda.getConfig().pT2perRadius;
+  sch.impactMax = seedfinder_cuda.getConfig().impactMax;
+  sch.deltaInvHelixDiameter = seedFilterConfig.deltaInvHelixDiameter;
+  sch.impactWeightFactor = seedFilterConfig.impactWeightFactor;
+  sch.filterDeltaRMin = seedFilterConfig.deltaRMin;
+  sch.compatSeedWeight = seedFilterConfig.compatSeedWeight;
+  sch.compatSeedLimit = seedFilterConfig.compatSeedLimit;
+
+  GPUStructs::Config* scd; // for device
+  ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((GPUStructs::Config**)&scd,
+                                        sizeof(GPUStructs::Config),w.stream));
+  ACTS_CUDA_ERROR_CHECK(
+                        cudaMemcpyAsync(scd, &sch, sizeof(GPUStructs::Config),
+                                        cudaMemcpyHostToDevice, w.stream));
+
+  
   group_count = 0;
   std::vector<std::vector<Acts::Seed<SpacePoint>>> seedVector_cuda;
   groupIt = spGroup.begin();
@@ -436,7 +464,9 @@ int proc(Work &w) {
       ++groupIt;
     for (; !(groupIt == spGroup.end()); ++groupIt) {
       seedVector_cuda.push_back(seedfinder_cuda.createSeedsForGroup(
-                                                                    groupIt.bottom(), groupIt.middle(), groupIt.top(),w));
+                                                                    groupIt.bottom(),
+                                                                    groupIt.middle(),
+                                                                    groupIt.top(),w,scd));
       group_count++;
       if (allgroup == false) {
         if (group_count >= nGroupToIterate)
@@ -444,6 +474,7 @@ int proc(Work &w) {
       }
     }
   }
+
   //  auto end_cuda = std::chrono::system_clock::now();
   auto end_cuda = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsec_cuda = end_cuda - start_cuda;
