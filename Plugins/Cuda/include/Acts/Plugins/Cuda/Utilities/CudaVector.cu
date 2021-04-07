@@ -31,11 +31,22 @@ class CudaVector {
     ACTS_CUDA_ERROR_CHECK(
         cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
   }
+  CudaVector(size_t size, cudaStream_t* s):m_stream(s) {
+    m_size = size;
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+  }
 
   CudaVector(size_t size, var_t* vector) {
     m_size = size;
     ACTS_CUDA_ERROR_CHECK(
         cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
+    copyH2D(vector, m_size, 0);
+  }
+  CudaVector(size_t size, var_t* vector, cudaStream_t* s):m_stream(s) {
+    m_size = size;
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
     copyH2D(vector, m_size, 0);
   }
 
@@ -45,31 +56,49 @@ class CudaVector {
         cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
     copyH2D(vector, len, offset);
   }
+  CudaVector(size_t size, var_t* vector, size_t len, size_t offset,cudaStream_t* s):m_stream(s) {
+    m_size = size;
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+    copyH2D(vector, len, offset);
+  }
 
   ~CudaVector() {
-    if (m_devPtr)
-      cudaFree(m_devPtr);
+    if (m_devPtr) {
+      if (m_stream) {
+        cudaFreeAsync(m_devPtr, *m_stream);
+      } else {
+        cudaFree(m_devPtr);
+      }
+    }
   }
 
   var_t* get(size_t offset = 0) { return m_devPtr + offset; }
 
   void copyH2D(var_t* vector, size_t len, size_t offset) {
-    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_devPtr + offset, vector,
-                                     len * sizeof(var_t),
-                                     cudaMemcpyHostToDevice));
-  }
-  void copyH2D(var_t* vector, size_t len, size_t offset, cudaStream_t* stream) {
-    ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_devPtr + offset, vector,
-                                          len * sizeof(var_t),
-                                          cudaMemcpyHostToDevice, *stream));
+    if (m_stream) {
+      ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_devPtr + offset, vector,
+                                            len * sizeof(var_t),
+                                            cudaMemcpyHostToDevice,
+                                            *m_stream));
+    } else {
+      ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_devPtr + offset, vector,
+                                       len * sizeof(var_t),
+                                       cudaMemcpyHostToDevice));
+    }
   }
 
   void zeros() {
-    ACTS_CUDA_ERROR_CHECK(cudaMemset(m_devPtr, 0, m_size * sizeof(var_t)));
+    if (m_stream) {
+      ACTS_CUDA_ERROR_CHECK(cudaMemsetAsync(m_devPtr, 0, m_size * sizeof(var_t),*m_stream));
+    } else {
+      ACTS_CUDA_ERROR_CHECK(cudaMemset(m_devPtr, 0, m_size * sizeof(var_t)));
+    }
   }
 
  private:
-  var_t* m_devPtr = nullptr;
+  var_t* m_devPtr{nullptr};
   size_t m_size;
+  cudaStream_t* m_stream{nullptr};
 };
 }  // namespace Acts

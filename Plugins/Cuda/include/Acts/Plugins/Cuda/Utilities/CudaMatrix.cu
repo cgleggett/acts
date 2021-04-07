@@ -29,21 +29,39 @@ class CudaMatrix {
   CudaMatrix(size_t nRows, size_t nCols) {
     m_setSize(nRows, nCols);
     ACTS_CUDA_ERROR_CHECK(
-        cudaMalloc((var_t**)&m_devPtr, m_nRows * m_nCols * sizeof(var_t)));
+        cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
+    zeros();
+  }
+  CudaMatrix(size_t nRows, size_t nCols, cudaStream_t* s):m_stream(s) {
+    m_setSize(nRows, nCols);
+    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t), *m_stream));
+
     zeros();
   }
 
   CudaMatrix(size_t nRows, size_t nCols, var_t* mat) {
     m_setSize(nRows, nCols);
     ACTS_CUDA_ERROR_CHECK(
-        cudaMalloc((var_t**)&m_devPtr, m_nRows * m_nCols * sizeof(var_t)));
+        cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
+    copyH2D(mat, m_size, 0);
+  }
+  CudaMatrix(size_t nRows, size_t nCols, var_t* mat, cudaStream_t* s):m_stream(s) {
+    m_setSize(nRows, nCols);
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t), *m_stream));
     copyH2D(mat, m_size, 0);
   }
 
   CudaMatrix(size_t nRows, size_t nCols, CpuMatrix<var_t>* mat) {
     m_setSize(nRows, nCols);
     ACTS_CUDA_ERROR_CHECK(
-        cudaMalloc((var_t**)&m_devPtr, m_nRows * m_nCols * sizeof(var_t)));
+        cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
+    copyH2D(mat->get(0, 0), m_size, 0);
+  }
+  CudaMatrix(size_t nRows, size_t nCols, CpuMatrix<var_t>* mat, cudaStream_t* s):m_stream(s) {
+    m_setSize(nRows, nCols);
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t), *m_stream));
     copyH2D(mat->get(0, 0), m_size, 0);
   }
 
@@ -51,7 +69,14 @@ class CudaMatrix {
              size_t offset) {
     m_setSize(nRows, nCols);
     ACTS_CUDA_ERROR_CHECK(
-        cudaMalloc((var_t**)&m_devPtr, m_nRows * m_nCols * sizeof(var_t)));
+        cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
+    copyH2D(mat, len, offset);
+  }
+  CudaMatrix(size_t nRows, size_t nCols, var_t* mat, size_t len,
+             size_t offset, cudaStream_t* s):m_stream(s) {
+    m_setSize(nRows, nCols);
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
     copyH2D(mat, len, offset);
   }
 
@@ -59,13 +84,25 @@ class CudaMatrix {
              size_t offset) {
     m_setSize(nRows, nCols);
     ACTS_CUDA_ERROR_CHECK(
-        cudaMalloc((var_t**)&m_devPtr, m_nRows * m_nCols * sizeof(var_t)));
+        cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
+    copyH2D(mat->get(0, 0), len, offset);
+  }
+  CudaMatrix(size_t nRows, size_t nCols, CpuMatrix<var_t>* mat, size_t len,
+             size_t offset, cudaStream_t* s):m_stream(s) {
+    m_setSize(nRows, nCols);
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
     copyH2D(mat->get(0, 0), len, offset);
   }
 
   ~CudaMatrix() {
-    if (m_devPtr)
-      cudaFree(m_devPtr);
+    if (m_devPtr) {
+      if (m_stream) {
+        cudaFreeAsync(m_devPtr,*m_stream);
+      } else {
+        cudaFree(m_devPtr);
+      }
+    }
   }
 
   var_t* get(size_t row = 0, size_t col = 0) {
@@ -74,26 +111,45 @@ class CudaMatrix {
   }
 
   void copyH2D(var_t* matrix, size_t len, size_t offset = 0) {
-    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_devPtr + offset, matrix,
-                                     len * sizeof(var_t),
-                                     cudaMemcpyHostToDevice));
+    if (m_stream) {
+      ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_devPtr + offset, matrix,
+                                            len * sizeof(var_t),
+                                            cudaMemcpyHostToDevice,
+                                            *m_stream));
+    } else {
+      ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_devPtr + offset, matrix,
+                                       len * sizeof(var_t),
+                                       cudaMemcpyHostToDevice));
+    }
   }
 
   void copyH2D(const var_t* matrix, size_t len, size_t offset = 0) {
-    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_devPtr + offset, matrix,
-                                     len * sizeof(var_t),
-                                     cudaMemcpyHostToDevice));
+    if (m_stream) {
+      ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_devPtr + offset, matrix,
+                                            len * sizeof(var_t),
+                                            cudaMemcpyHostToDevice,
+                                            *m_stream));
+    } else {
+      ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_devPtr + offset, matrix,
+                                       len * sizeof(var_t),
+                                       cudaMemcpyHostToDevice));
+    }
   }
 
   void zeros() {
-    ACTS_CUDA_ERROR_CHECK(cudaMemset(m_devPtr, 0, m_size * sizeof(var_t)));
+    if (m_stream) {
+      ACTS_CUDA_ERROR_CHECK(cudaMemsetAsync(m_devPtr, 0, m_size * sizeof(var_t),*m_stream));
+    } else {
+      ACTS_CUDA_ERROR_CHECK(cudaMemset(m_devPtr, 0, m_size * sizeof(var_t)));
+    }
   }
 
  private:
-  var_t* m_devPtr = nullptr;
+  var_t* m_devPtr{nullptr};
   size_t m_nCols;
   size_t m_nRows;
   size_t m_size;
+  cudaStream_t* m_stream{nullptr};
 
   void m_setSize(size_t row, size_t col) {
     m_nRows = row;

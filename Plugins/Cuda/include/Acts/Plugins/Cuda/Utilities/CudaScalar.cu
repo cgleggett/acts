@@ -45,6 +45,11 @@ class CudaScalar {
     ACTS_CUDA_ERROR_CHECK(cudaMalloc((var_t**)&m_devPtr, sizeof(var_t)));
   }
 
+  CudaScalar(cudaStream_t *s): m_stream(s) {
+    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t), *m_stream));
+  }
+
+  
   CudaScalar(var_t* scalar) {
     // MSG(  "CUS " << std::this_thread::get_id() << "  "
     //       << type_name<var_t>()
@@ -52,6 +57,16 @@ class CudaScalar {
     ACTS_CUDA_ERROR_CHECK(cudaMalloc((var_t**)&m_devPtr, sizeof(var_t)));
     ACTS_CUDA_ERROR_CHECK(
         cudaMemcpy(m_devPtr, scalar, sizeof(var_t), cudaMemcpyHostToDevice));
+  }
+
+  CudaScalar(var_t* scalar, cudaStream_t *s):m_stream(s) {
+    // MSG(  "CUS " << std::this_thread::get_id() << "  "
+    //       << type_name<var_t>()
+    //       << "  " << scalar << " " << *scalar );
+    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t),*m_stream));
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMemcpyAsync(m_devPtr, scalar, sizeof(var_t),
+                                          cudaMemcpyHostToDevice,*m_stream));
   }
 
   CudaScalar(const var_t* scalar) {
@@ -71,7 +86,31 @@ class CudaScalar {
         cudaMemcpy(m_devPtr, scalar, sizeof(var_t), cudaMemcpyHostToDevice));
   }
 
-  ~CudaScalar() { ACTS_CUDA_ERROR_CHECK(cudaFree(m_devPtr)); }
+  CudaScalar(const var_t* scalar, cudaStream_t* s):m_stream(s) {
+    // std::cout << "---> CUS " << std::this_thread::get_id() << "  "
+    //           << type_name<var_t>()
+    //           << "  " << scalar << " " << *scalar << std::endl;
+    // MSG(  "CUSc " << std::this_thread::get_id() << "  "
+    //       << type_name<var_t>()
+    //       << "  " << scalar << " " << *scalar );
+
+    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t),*m_stream));
+    if (m_devPtr == nullptr) {
+      MSG("devprt == 0!");
+      throw std::bad_alloc();
+    }
+    ACTS_CUDA_ERROR_CHECK(
+                          cudaMemcpyAsync(m_devPtr, scalar, sizeof(var_t),
+                                          cudaMemcpyHostToDevice, *m_stream));
+  }
+
+  ~CudaScalar() {
+    if (m_stream) {
+      ACTS_CUDA_ERROR_CHECK(cudaFreeAsync(m_devPtr,*m_stream));
+    } else {
+      ACTS_CUDA_ERROR_CHECK(cudaFree(m_devPtr));
+    }
+  }
 
   var_t* get() { return m_devPtr; }
 
@@ -79,5 +118,6 @@ class CudaScalar {
 
  private:
   var_t* m_devPtr{nullptr};
+  cudaStream_t* m_stream{nullptr};
 };
 }  // namespace Acts

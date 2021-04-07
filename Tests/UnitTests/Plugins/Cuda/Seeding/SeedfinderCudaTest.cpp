@@ -271,6 +271,17 @@ int main(int argc, char** argv) {
       t4 += v.timeSeedfinder/v.nCalls;
     }
     printf("avg:  %6.3f  %6.3f  %6.3f   %6.3f\n",t1/nThreads,t2/nThreads,t3/nThreads, t4/nThreads);
+  } else {
+    std::cout << "seedfinder runtime in s:\n";
+    int i=0;
+    float t4{0};
+    for (auto &v: vw) {
+      ++i;
+      ACTS_CUDA_ERROR_CHECK(cudaStreamDestroy( v.stream ));
+      printf("%3d:  %6.3f\n",i, v.timeSeedfinder/v.nCalls);
+      t4 += v.timeSeedfinder/v.nCalls;
+    }
+    printf("avg:  %6.3f\n",t4/nThreads);
   }
 
   
@@ -305,7 +316,9 @@ int proc(Work &w) {
 
   std::vector<const SpacePoint*> spVec = readFile(file);
 
-  std::cout << "read " << spVec.size() << " SP from file " << file << std::endl;
+  std::cout << "read " << spVec.size() << " SP from file " << file
+            << " in thread " << w.iThread
+            << std::endl;
   //  MSG( "read " << spVec.size() << " SP from file " << file );
 
   // Set seed finder configuration
