@@ -37,6 +37,37 @@ class CpuScalar {
     ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_hostPtr, cuScalar->get(), sizeof(var_t),
                                      cudaMemcpyDeviceToHost));
   }
+  CpuScalar(CudaScalar<var_t>* cuScalar, cudaStream_t* s, bool pinned = 0):m_stream(s) {
+    m_pinned = pinned;
+    if (pinned == 0) {
+      m_hostPtr = new var_t[1];
+    } else if (pinned == 1) {
+      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
+    }
+    ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_hostPtr, cuScalar->get(), sizeof(var_t),
+                                          cudaMemcpyDeviceToHost,*m_stream));
+  }
+
+  CpuScalar(var_t* cuScalar, bool pinned = 0) {
+    m_pinned = pinned;
+    if (pinned == 0) {
+      m_hostPtr = new var_t[1];
+    } else if (pinned == 1) {
+      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
+    }
+    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_hostPtr, cuScalar, sizeof(var_t),
+                                     cudaMemcpyDeviceToHost));
+  }
+  CpuScalar(var_t* cuScalar, cudaStream_t* s, bool pinned = 0):m_stream(s) {
+    m_pinned = pinned;
+    if (pinned == 0) {
+      m_hostPtr = new var_t[1];
+    } else if (pinned == 1) {
+      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
+    }
+    ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_hostPtr, cuScalar, sizeof(var_t),
+                                          cudaMemcpyDeviceToHost, *m_stream));
+  }
 
   ~CpuScalar() {
     if (!m_pinned) {
@@ -51,9 +82,10 @@ class CpuScalar {
   void Set(var_t val) { m_hostPtr[0] = val; }
 
  private:
-  var_t* m_hostPtr = nullptr;
+  var_t* m_hostPtr {nullptr};
   size_t m_size;
   bool m_pinned;
+  cudaStream_t* m_stream{nullptr};
 };
 
 }  // namespace Acts
