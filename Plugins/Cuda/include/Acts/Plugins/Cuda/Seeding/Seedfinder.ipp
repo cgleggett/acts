@@ -43,7 +43,7 @@ template <typename sp_range_t>
 std::vector<Seed<external_spacepoint_t>>
 Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
     sp_range_t bottomSPs, sp_range_t middleSPs, sp_range_t topSPs, Work& w,
-    GPUStructs::Config* scd) const {
+    GPUStructs::Config* scd, GPUStructs::Flatten* sfd, GPUStructs::Doublet* /*sdd*/) const {
   std::vector<Seed<external_spacepoint_t>> outputVec;
 
   // Get SeedfinderConfig values
@@ -98,18 +98,25 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
     topSPvec.push_back(sp);
   }
 
-  CudaScalar<int> nSpM_cuda(&nSpM,&w.stream);
-  CudaScalar<int> nSpB_cuda(&nSpB,&w.stream);
-  CudaScalar<int> nSpT_cuda(&nSpT,&w.stream);
+  //  std::cout << "n: " << nSpM << " " << nSpB << " " << nSpT << std::endl;
+
+  // CudaScalar<int> nSpM_cuda(&nSpM,&w.stream);
+  // CudaScalar<int> nSpB_cuda(&nSpB,&w.stream);
+  // CudaScalar<int> nSpT_cuda(&nSpT,&w.stream);
 
   if (nSpM == 0 || nSpB == 0 || nSpT == 0)
     return outputVec;
 
   // Matrix flattening
-  CpuMatrix<float> spMmat_cpu(nSpM, 6);  // x y z r varR varZ
-  CpuMatrix<float> spBmat_cpu(nSpB, 6);
-  CpuMatrix<float> spTmat_cpu(nSpT, 6);
+  // CpuMatrix<float> spMmat_cpu(nSpM, 6);  // x y z r varR varZ
+  // CpuMatrix<float> spBmat_cpu(nSpB, 6);
+  // CpuMatrix<float> spTmat_cpu(nSpT, 6);
 
+  GPUStructs::Flatten sfh;
+  sfh.nSpM = nSpM;
+  sfh.nSpB = nSpB;
+  sfh.nSpT = nSpT;
+  
   auto fillMatrix = [](auto& mat, auto& id, auto sp) {
     mat.set(id, 0, sp->x());
     mat.set(id, 1, sp->y());
@@ -120,27 +127,66 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
     id++;
   };
 
-  int mIdx(0);
+  // int mIdx(0);
+  // for (auto sp : middleSPs) {
+  //   fillMatrix(spMmat_cpu, mIdx, sp);
+  // }
+
+  // int bIdx(0);
+  // for (auto sp : bottomSPs) {
+  //   fillMatrix(spBmat_cpu, bIdx, sp);
+  // }
+  // int tIdx(0);
+  // for (auto sp : topSPs) {
+  //   fillMatrix(spTmat_cpu, tIdx, sp);
+  // }
+
+  auto fillSFH = [](auto& mat, auto& ii, auto nr, auto sp) {
+                   mat[ii] = sp->x();
+                   mat[ii+nr] = sp->y();
+                   mat[ii+nr*2] = sp->z();
+                   mat[ii+nr*3] = sp->radius();
+                   mat[ii+nr*4] = sp->varianceR();
+                   mat[ii+nr*5] = sp->varianceZ();    
+    ++ii;
+  };
+  
+  GPUStructs::Flatten f2;
+  memset((void*)&f2, 0, sizeof(GPUStructs::Flatten));
+  size_t ii{0};
   for (auto sp : middleSPs) {
-    fillMatrix(spMmat_cpu, mIdx, sp);
+    fillSFH(sfh.spMmat, ii, sfh.nSpM, sp);
   }
-  int bIdx(0);
+
+  
+  ii=0;
   for (auto sp : bottomSPs) {
-    fillMatrix(spBmat_cpu, bIdx, sp);
+    fillSFH(sfh.spBmat, ii, sfh.nSpB, sp);
   }
-  int tIdx(0);
+
+  // std::cout << "----\n";
+  // std::cout << sfh.spMmat[0] << ": " << *spMmat_cpu.get(0,0) << std::endl;
+  // std::cout << sfh.spMmat[1] << ": " << *spMmat_cpu.get(0,1) << std::endl;
+  // std::cout << "----\n";
+  // float* f1 =  spMmat_cpu.get(0,0);
+  // for (int i=0; i<12; ++i) {
+  //   std::cout << sfh.spMmat[i] << "  " << *f1 << std::endl;
+  //   ++f1;
+  // }
+  
+  
+  ii=0;
   for (auto sp : topSPs) {
-    fillMatrix(spTmat_cpu, tIdx, sp);
+    fillSFH(sfh.spTmat, ii, sfh.nSpT, sp);
   }
 
-  CudaMatrix<float> spMmat_cuda(nSpM, 6, &spMmat_cpu, &w.stream);
-  CudaMatrix<float> spBmat_cuda(nSpB, 6, &spBmat_cpu, &w.stream);
-  CudaMatrix<float> spTmat_cuda(nSpT, 6, &spTmat_cpu, &w.stream);
 
-
-  // Flatten *s;
-  // cudaMalloc((Flatten**)&s,sizeof(Flatten));
-  // std::cout << "NSP: " << nSpM << " " << nSpB << " " << nSpT << "  " << sizeof(Flatten) << std::endl;
+  ACTS_CUDA_ERROR_CHECK(cudaMemcpy(sfd, &sfh, sizeof(GPUStructs::Flatten),
+                                        cudaMemcpyHostToDevice));
+  
+  // CudaMatrix<float> spMmat_cuda(nSpM, 6, &spMmat_cpu, &w.stream);
+  // CudaMatrix<float> spBmat_cuda(nSpB, 6, &spBmat_cpu, &w.stream);
+  // CudaMatrix<float> spTmat_cuda(nSpT, 6, &spTmat_cpu, &w.stream);
 
 
   //------------------------------------
@@ -165,6 +211,8 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   CudaMatrix<int> tmpBcompIndex_cuda(nSpB, nSpM, &w.stream);
   CudaMatrix<int> tmpTcompIndex_cuda(nSpT, nSpM, &w.stream);
 
+  // ACTS_CUDA_ERROR_CHECK(cudaMemsetAsync(sdd, 0, sizeof(GPUStructs::Doublet),w.stream));
+
   dim3 DS_BlockSize = m_config.maxBlockSize;
   dim3 DS_GridSize(nSpM, 1, 1);
 
@@ -182,9 +230,9 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   //               tmpTcompIndex_cuda.get(),
   //               w );
 
-  searchDoublet(DS_GridSize, DS_BlockSize, nSpM_cuda.get(), spMmat_cuda.get(),
-                nSpB_cuda.get(), spBmat_cuda.get(), nSpT_cuda.get(),
-                spTmat_cuda.get(), &scd->deltaRMin, &scd->deltaRMax,
+  searchDoublet(DS_GridSize, DS_BlockSize, &sfd->nSpM, (float*)&sfd->spMmat,
+                &sfd->nSpB, (float*)&sfd->spBmat, &sfd->nSpT,
+                (float*)&sfd->spTmat, &scd->deltaRMin, &scd->deltaRMax,
                 &scd->cotThetaMax, &scd->collisionRegionMin,
                 &scd->collisionRegionMax, nSpMcomp_cuda.get(),
                 nSpBcompPerSpMMax_cuda.get(), nSpTcompPerSpMMax_cuda.get(),
@@ -194,7 +242,11 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
                 tmpTcompIndex_cuda.get(),
                 w );
 
+  // GPUStructs::Doublet* sdh = new GPUStructs::Doublet;
+  // ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(sdh, sdd, sizeof(GPUStructs::Doublet),
+  //                                       cudaMemcpyDeviceToHost,w.stream));
 
+  
   CpuScalar<int> nSpMcomp_cpu(&nSpMcomp_cuda);
   CpuScalar<int> nSpBcompPerSpMMax_cpu(&nSpBcompPerSpMMax_cuda);
   CpuScalar<int> nSpTcompPerSpMMax_cpu(&nSpTcompPerSpMMax_cuda);
@@ -220,13 +272,13 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   dim3 TC_BlockSize = m_config.maxBlockSize;
 
   transformCoordinate(
-      TC_GridSize, TC_BlockSize, nSpM_cuda.get(), spMmat_cuda.get(),
-      McompIndex_cuda.get(), nSpB_cuda.get(), spBmat_cuda.get(),
-      nSpBcompPerSpMMax_cuda.get(), BcompIndex_cuda.get(), nSpT_cuda.get(),
-      spTmat_cuda.get(), nSpTcompPerSpMMax_cuda.get(), TcompIndex_cuda.get(),
-      spMcompMat_cuda.get(), spBcompMatPerSpM_cuda.get(),
-      circBcompMatPerSpM_cuda.get(), spTcompMatPerSpM_cuda.get(),
-      circTcompMatPerSpM_cuda.get(), w);
+                      TC_GridSize, TC_BlockSize, &sfd->nSpM, (float*)&sfd->spMmat,
+                      McompIndex_cuda.get(), &sfd->nSpB, (float*)&sfd->spBmat,
+                      nSpBcompPerSpMMax_cuda.get(), BcompIndex_cuda.get(), &sfd->nSpT,
+                      (float*)&sfd->spTmat, nSpTcompPerSpMMax_cuda.get(), TcompIndex_cuda.get(),
+                      spMcompMat_cuda.get(), spBcompMatPerSpM_cuda.get(),
+                      circBcompMatPerSpM_cuda.get(), spTcompMatPerSpM_cuda.get(),
+                      circTcompMatPerSpM_cuda.get(), w);
 
 
 
@@ -331,6 +383,8 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
       m_config.seedFilter->filterSeeds_1SpFixed(seedsPerSpM, outputVec);
     }
   }
+  //  delete sdh;
+  
   // ACTS_CUDA_ERROR_CHECK(cudaStreamDestroy(cuStream));
   return outputVec;
 }

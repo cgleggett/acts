@@ -428,6 +428,12 @@ int proc(Work &w) {
   auto start_cuda = std::chrono::high_resolution_clock::now();
 
 
+  cudaDeviceSynchronize();
+  size_t free{0}, tot{0};
+  cudaMemGetInfo(&free, &tot);
+  std::cout << "mem:  t:" << tot << "  f:" << free << "  u:" << tot-free << "\n";
+
+  
   GPUStructs::Config sch;
   const auto seedFilterConfig = seedfinder_cuda.getConfig().seedFilter->getSeedFilterConfig();
 
@@ -447,13 +453,34 @@ int proc(Work &w) {
   sch.compatSeedWeight = seedFilterConfig.compatSeedWeight;
   sch.compatSeedLimit = seedFilterConfig.compatSeedLimit;
 
-  GPUStructs::Config* scd; // for device
+  GPUStructs::Config* scd{0}; // for device
   ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((GPUStructs::Config**)&scd,
                                         sizeof(GPUStructs::Config),w.stream));
   ACTS_CUDA_ERROR_CHECK(
                         cudaMemcpyAsync(scd, &sch, sizeof(GPUStructs::Config),
                                         cudaMemcpyHostToDevice, w.stream));
 
+  GPUStructs::Flatten* sfd{0};
+  ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((GPUStructs::Flatten**)&sfd,
+                                        sizeof(GPUStructs::Flatten),w.stream));
+
+  GPUStructs::Doublet* sdd{0};
+  ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((GPUStructs::Doublet**)&sdd,
+                                        sizeof(GPUStructs::Doublet),w.stream));
+
+  GPUStructs::Doublet* sdh = new GPUStructs::Doublet;
+  ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(sdh, sdd, sizeof(GPUStructs::Doublet),
+                                        cudaMemcpyDeviceToHost,w.stream));
+
+  
+  cudaDeviceSynchronize();
+  cudaMemGetInfo(&free, &tot);
+
+  
+  
+  std::cout << "Flatten: " << sizeof(GPUStructs::Flatten) << "\n";
+  std::cout << "Doublet: " << sizeof(GPUStructs::Doublet) << std::endl;
+  std::cout << "mem:  t:" << tot << "  f:" << free << "  u:" << tot-free << "\n";
   
   group_count = 0;
   std::vector<std::vector<Acts::Seed<SpacePoint>>> seedVector_cuda;
@@ -466,7 +493,8 @@ int proc(Work &w) {
       seedVector_cuda.push_back(seedfinder_cuda.createSeedsForGroup(
                                                                     groupIt.bottom(),
                                                                     groupIt.middle(),
-                                                                    groupIt.top(),w,scd));
+                                                                    groupIt.top(),w,
+                                                                    scd,sfd,sdd));
       group_count++;
       if (allgroup == false) {
         if (group_count >= nGroupToIterate)

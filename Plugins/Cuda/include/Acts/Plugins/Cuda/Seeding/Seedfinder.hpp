@@ -61,7 +61,10 @@ class Seedfinder<external_spacepoint_t, Acts::Cuda> {
                                                                 sp_range_t middleSPs,
                                                                 sp_range_t topSPs,
                                                                 Work& w,
-                                                                GPUStructs::Config* scd) const;
+                                                                GPUStructs::Config* scd,
+                                                                GPUStructs::Flatten* sfd,
+                                                                GPUStructs::Doublet* sdd
+                                                                ) const;
 
   const Acts::SeedfinderConfig<external_spacepoint_t>& getConfig() { return m_config; }
 

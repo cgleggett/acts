@@ -25,20 +25,23 @@ struct Config {
 };
 
 struct Flatten {
-  int nSpM;
-  int nSpB;
-  int nSpT;
+  int nSpM{0};
+  int nSpB{0};
+  int nSpT{0};
 
-  float spMmat[MAX_NSPM][6];
-  float spBmat[MAX_NSPB][6];
-  float spTmat[MAX_NSPT][6];
+  float spMmat[MAX_NSPM*6];
+  float spBmat[MAX_NSPB*6];
+  float spTmat[MAX_NSPT*6];
+  // float spMmat[MAX_NSPM][6];
+  // float spBmat[MAX_NSPB][6];
+  // float spTmat[MAX_NSPT][6];
 };
 
 struct Doublet {
 
-  int nSpMcomp;
-  int nSpBcompPerSpMMax;
-  int nSpTcompPerSpMMax;
+  int nSpMcomp{0};
+  int nSpBcompPerSpMMax{0};
+  int nSpTcompPerSpMMax{0};
   int nSpBcompPerSpM[MAX_NSPM];
   int McompIndex[MAX_NSPM];
   int BcompIndex[MAX_NSPB][MAX_NSPM];
