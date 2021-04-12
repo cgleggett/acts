@@ -1,9 +1,13 @@
 #ifndef SEEDFINDER_STRUCTS_H
 #define SEEDFINDER_STRUCTS_H 1
 
-#define MAX_NSPM 2048
-#define MAX_NSPB 9216
-#define MAX_NSPT 9216
+// #define MAX_NSPM 2048
+// #define MAX_NSPB 9216
+// #define MAX_NSPT 9216
+
+#define MAX_NSPM 1024
+#define MAX_NSPB 4092
+#define MAX_NSPT 4092
 
 namespace GPUStructs {
 struct Config {

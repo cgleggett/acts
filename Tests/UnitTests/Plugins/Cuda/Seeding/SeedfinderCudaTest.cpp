@@ -465,18 +465,15 @@ int proc(Work &w) {
                                         sizeof(GPUStructs::Flatten),w.stream));
 
   GPUStructs::Doublet* sdd{0};
-  ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((GPUStructs::Doublet**)&sdd,
-                                        sizeof(GPUStructs::Doublet),w.stream));
+  // ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((GPUStructs::Doublet**)&sdd,
+  //                                       sizeof(GPUStructs::Doublet),w.stream));
 
-  GPUStructs::Doublet* sdh = new GPUStructs::Doublet;
-  ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(sdh, sdd, sizeof(GPUStructs::Doublet),
-                                        cudaMemcpyDeviceToHost,w.stream));
-
-  
-  cudaDeviceSynchronize();
-  cudaMemGetInfo(&free, &tot);
+  // GPUStructs::Doublet* sdh = new GPUStructs::Doublet;
+  // ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(sdh, sdd, sizeof(GPUStructs::Doublet),
+  //                                       cudaMemcpyDeviceToHost,w.stream));
 
   
+  cudaMemGetInfo(&free, &tot);  
   
   std::cout << "Flatten: " << sizeof(GPUStructs::Flatten) << "\n";
   std::cout << "Doublet: " << sizeof(GPUStructs::Doublet) << std::endl;
