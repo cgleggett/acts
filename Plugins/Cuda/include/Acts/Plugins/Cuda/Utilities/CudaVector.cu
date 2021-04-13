@@ -31,10 +31,11 @@ class CudaVector {
     ACTS_CUDA_ERROR_CHECK(
         cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
   }
-  CudaVector(size_t size, cudaStream_t* s):m_stream(s) {
+  CudaVector(size_t size, cudaStream_t* s, int dev=0):m_stream(s),m_devID(dev) {
     m_size = size;
-    ACTS_CUDA_ERROR_CHECK(
-                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+    // ACTS_CUDA_ERROR_CHECK(
+    //                       cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+    m_devPtr = (var_t*) cms::cuda::allocate_device(m_devID, m_size*sizeof(var_t), *m_stream);
   }
 
   CudaVector(size_t size, var_t* vector) {
@@ -43,10 +44,11 @@ class CudaVector {
         cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
     copyH2D(vector, m_size, 0);
   }
-  CudaVector(size_t size, var_t* vector, cudaStream_t* s):m_stream(s) {
+  CudaVector(size_t size, var_t* vector, cudaStream_t* s, int dev=0):m_stream(s),m_devID(dev) {
     m_size = size;
-    ACTS_CUDA_ERROR_CHECK(
-                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+    // ACTS_CUDA_ERROR_CHECK(
+    //                       cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+    m_devPtr = (var_t*) cms::cuda::allocate_device(m_devID, m_size*sizeof(var_t), *m_stream);
     copyH2D(vector, m_size, 0);
   }
 
@@ -56,17 +58,19 @@ class CudaVector {
         cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
     copyH2D(vector, len, offset);
   }
-  CudaVector(size_t size, var_t* vector, size_t len, size_t offset,cudaStream_t* s):m_stream(s) {
+  CudaVector(size_t size, var_t* vector, size_t len, size_t offset,cudaStream_t* s,int dev=0):m_stream(s),m_devID(dev) {
     m_size = size;
-    ACTS_CUDA_ERROR_CHECK(
-                          cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+    // ACTS_CUDA_ERROR_CHECK(
+    //                       cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t),*m_stream));
+    m_devPtr = (var_t*) cms::cuda::allocate_device(m_devID, m_size*sizeof(var_t), *m_stream);
     copyH2D(vector, len, offset);
   }
 
   ~CudaVector() {
     if (m_devPtr) {
       if (m_stream) {
-        cudaFreeAsync(m_devPtr, *m_stream);
+        //        cudaFreeAsync(m_devPtr, *m_stream);
+        cms::cuda::free_device(m_devID, m_devPtr, *m_stream);
       } else {
         cudaFree(m_devPtr);
       }
@@ -100,5 +104,6 @@ class CudaVector {
   var_t* m_devPtr{nullptr};
   size_t m_size;
   cudaStream_t* m_stream{nullptr};
+  int m_devID {0};
 };
 }  // namespace Acts
