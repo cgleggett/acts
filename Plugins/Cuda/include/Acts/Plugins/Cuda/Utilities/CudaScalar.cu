@@ -10,6 +10,7 @@
 
 #include "Acts/Plugins/Cuda/Utilities/CpuScalar.hpp"
 #include "Acts/Plugins/Cuda/Utilities/MSG.hpp"
+#include "Acts/Plugins/Cuda/Utilities/CUDACore/allocate_device.h"
 
 #include <iostream>
 #include <memory>
@@ -45,8 +46,9 @@ class CudaScalar {
     ACTS_CUDA_ERROR_CHECK(cudaMalloc((var_t**)&m_devPtr, sizeof(var_t)));
   }
 
-  CudaScalar(cudaStream_t *s): m_stream(s) {
-    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t), *m_stream));
+  CudaScalar(cudaStream_t *s, int dev=0): m_stream(s),m_devID(dev) {
+    //    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t), *m_stream));
+    m_devPtr = (var_t*) cms::cuda::allocate_device(m_devID, sizeof(var_t), *m_stream);
   }
 
   
@@ -59,11 +61,12 @@ class CudaScalar {
         cudaMemcpy(m_devPtr, scalar, sizeof(var_t), cudaMemcpyHostToDevice));
   }
 
-  CudaScalar(var_t* scalar, cudaStream_t *s):m_stream(s) {
+  CudaScalar(var_t* scalar, cudaStream_t *s, int dev=0):m_stream(s),m_devID(dev) {
     // MSG(  "CUS " << std::this_thread::get_id() << "  "
     //       << type_name<var_t>()
     //       << "  " << scalar << " " << *scalar );
-    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t),*m_stream));
+    //    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t),*m_stream));
+    m_devPtr = (var_t*) cms::cuda::allocate_device(m_devID, sizeof(var_t), *m_stream);
     ACTS_CUDA_ERROR_CHECK(
                           cudaMemcpyAsync(m_devPtr, scalar, sizeof(var_t),
                                           cudaMemcpyHostToDevice,*m_stream));
@@ -86,7 +89,7 @@ class CudaScalar {
         cudaMemcpy(m_devPtr, scalar, sizeof(var_t), cudaMemcpyHostToDevice));
   }
 
-  CudaScalar(const var_t* scalar, cudaStream_t* s):m_stream(s) {
+  CudaScalar(const var_t* scalar, cudaStream_t* s, int dev=0):m_stream(s),m_devID(dev) {
     // std::cout << "---> CUS " << std::this_thread::get_id() << "  "
     //           << type_name<var_t>()
     //           << "  " << scalar << " " << *scalar << std::endl;
@@ -94,7 +97,8 @@ class CudaScalar {
     //       << type_name<var_t>()
     //       << "  " << scalar << " " << *scalar );
 
-    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t),*m_stream));
+//    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, sizeof(var_t),*m_stream));
+    m_devPtr = (var_t*) cms::cuda::allocate_device(m_devID, sizeof(var_t), *m_stream);
     if (m_devPtr == nullptr) {
       MSG("devprt == 0!");
       throw std::bad_alloc();
@@ -106,7 +110,8 @@ class CudaScalar {
 
   ~CudaScalar() {
     if (m_stream) {
-      ACTS_CUDA_ERROR_CHECK(cudaFreeAsync(m_devPtr,*m_stream));
+      //      ACTS_CUDA_ERROR_CHECK(cudaFreeAsync(m_devPtr,*m_stream));
+      cms::cuda::free_device(m_devID, m_devPtr, *m_stream);
     } else {
       ACTS_CUDA_ERROR_CHECK(cudaFree(m_devPtr));
     }
@@ -119,5 +124,6 @@ class CudaScalar {
  private:
   var_t* m_devPtr{nullptr};
   cudaStream_t* m_stream{nullptr};
+  int m_devID {0};
 };
 }  // namespace Acts
