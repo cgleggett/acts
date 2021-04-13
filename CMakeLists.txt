@@ -167,7 +167,7 @@ if(ACTS_BUILD_PLUGIN_AUTODIFF)
 endif()
 if(ACTS_BUILD_PLUGIN_CUDA)
   enable_language(CUDA)
-  set(CMAKE_CUDA_STANDARD 14 CACHE STRING "CUDA C++ standard to use")
+  set(CMAKE_CUDA_STANDARD 17 CACHE STRING "CUDA C++ standard to use")
   set(CMAKE_CUDA_STANDARD_REQUIRED ON CACHE BOOL
     "Force the C++ standard requirement")
   set(CMAKE_CUDA_ARCHITECTURES "35;52;75" CACHE STRING
