@@ -1,9 +1,9 @@
 #include <limits>
 
-#include "Acts/Plugins/Cuda/Utilities/allocate_host.h"
-#include "Acts/Plugins/Cuda/Utilities/cudaCheck.h"
+#include "Acts/Plugins/Cuda/Utilities/CUDACore/allocate_host.h"
+#include "Acts/Plugins/Cuda/Utilities/CUDACore/cudaCheck.h"
 
-#include "Acts/Plugins/Cuda/Utilities/getCachingHostAllocator.h"
+#include "Acts/Plugins/Cuda/Utilities/CUDACore/getCachingHostAllocator.h"
 
 namespace {
   const size_t maxAllocationSize =

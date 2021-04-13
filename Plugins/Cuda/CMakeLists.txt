@@ -4,6 +4,8 @@ find_library(CUDART_LIBRARY cudart ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 add_library(
   ActsPluginCuda SHARED
   src/Seeding/Kernels.cu
+  include/Acts/Plugins/Cuda/Utilities/allocate_device.cpp
+  include/Acts/Plugins/Cuda/Utilities/allocate_host.cpp
 )
 target_include_directories(
   ActsPluginCuda
