@@ -18,6 +18,8 @@
 #include "Acts/Plugins/Cuda/Utilities/UsmMatrix.cu"
 #include "Acts/Plugins/Cuda/Utilities/UsmScalar.cu"
 
+#include "Acts/Plugins/Cuda/Utilities/allocate_device.cu"
+
 namespace Acts {
 class Cuda;
 }
