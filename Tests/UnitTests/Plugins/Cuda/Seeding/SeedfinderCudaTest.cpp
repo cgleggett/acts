@@ -430,34 +430,35 @@ int proc(Work &w) {
 
   cudaDeviceSynchronize();
   size_t free{0}, tot{0};
-  cudaMemGetInfo(&free, &tot);
-  std::cout << "mem:  t:" << tot << "  f:" << free << "  u:" << tot-free << "\n";
+  // cudaMemGetInfo(&free, &tot);
+  // std::cout << "mem:  t:" << tot << "  f:" << free << "  u:" << tot-free << "\n";
 
   
-  GPUStructs::Config sch;
+  GPUStructs::Config* sch;
+  ACTS_CUDA_ERROR_CHECK( cudaHostAlloc( &sch, sizeof(GPUStructs::Config), cudaHostAllocDefault ));
   const auto seedFilterConfig = seedfinder_cuda.getConfig().seedFilter->getSeedFilterConfig();
 
-  sch.deltaRMin = seedfinder_cuda.getConfig().deltaRMin;
-  sch.deltaRMax = seedfinder_cuda.getConfig().deltaRMax;
-  sch.cotThetaMax = seedfinder_cuda.getConfig().cotThetaMax;
-  sch.collisionRegionMin = seedfinder_cuda.getConfig().collisionRegionMin;
-  sch.collisionRegionMax = seedfinder_cuda.getConfig().collisionRegionMax;
-  sch.maxScatteringAngle2 = seedfinder_cuda.getConfig().maxScatteringAngle2;
-  sch.sigmaScattering = seedfinder_cuda.getConfig().sigmaScattering;
-  sch.minHelixDiameter2 = seedfinder_cuda.getConfig().minHelixDiameter2;
-  sch.pT2perRadius = seedfinder_cuda.getConfig().pT2perRadius;
-  sch.impactMax = seedfinder_cuda.getConfig().impactMax;
-  sch.deltaInvHelixDiameter = seedFilterConfig.deltaInvHelixDiameter;
-  sch.impactWeightFactor = seedFilterConfig.impactWeightFactor;
-  sch.filterDeltaRMin = seedFilterConfig.deltaRMin;
-  sch.compatSeedWeight = seedFilterConfig.compatSeedWeight;
-  sch.compatSeedLimit = seedFilterConfig.compatSeedLimit;
+  sch->deltaRMin = seedfinder_cuda.getConfig().deltaRMin;
+  sch->deltaRMax = seedfinder_cuda.getConfig().deltaRMax;
+  sch->cotThetaMax = seedfinder_cuda.getConfig().cotThetaMax;
+  sch->collisionRegionMin = seedfinder_cuda.getConfig().collisionRegionMin;
+  sch->collisionRegionMax = seedfinder_cuda.getConfig().collisionRegionMax;
+  sch->maxScatteringAngle2 = seedfinder_cuda.getConfig().maxScatteringAngle2;
+  sch->sigmaScattering = seedfinder_cuda.getConfig().sigmaScattering;
+  sch->minHelixDiameter2 = seedfinder_cuda.getConfig().minHelixDiameter2;
+  sch->pT2perRadius = seedfinder_cuda.getConfig().pT2perRadius;
+  sch->impactMax = seedfinder_cuda.getConfig().impactMax;
+  sch->deltaInvHelixDiameter = seedFilterConfig.deltaInvHelixDiameter;
+  sch->impactWeightFactor = seedFilterConfig.impactWeightFactor;
+  sch->filterDeltaRMin = seedFilterConfig.deltaRMin;
+  sch->compatSeedWeight = seedFilterConfig.compatSeedWeight;
+  sch->compatSeedLimit = seedFilterConfig.compatSeedLimit;
 
   GPUStructs::Config* scd{0}; // for device
   ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((GPUStructs::Config**)&scd,
                                         sizeof(GPUStructs::Config),w.stream));
   ACTS_CUDA_ERROR_CHECK(
-                        cudaMemcpyAsync(scd, &sch, sizeof(GPUStructs::Config),
+                        cudaMemcpyAsync(scd, sch, sizeof(GPUStructs::Config),
                                         cudaMemcpyHostToDevice, w.stream));
 
   GPUStructs::Flatten* sfd{0};
@@ -473,11 +474,10 @@ int proc(Work &w) {
   //                                       cudaMemcpyDeviceToHost,w.stream));
 
   
-  cudaMemGetInfo(&free, &tot);  
-  
-  std::cout << "Flatten: " << sizeof(GPUStructs::Flatten) << "\n";
-  std::cout << "Doublet: " << sizeof(GPUStructs::Doublet) << std::endl;
-  std::cout << "mem:  t:" << tot << "  f:" << free << "  u:" << tot-free << "\n";
+  // cudaMemGetInfo(&free, &tot);  
+  // std::cout << "Flatten: " << sizeof(GPUStructs::Flatten) << "\n";
+  // //  std::cout << "Doublet: " << sizeof(GPUStructs::Doublet) << std::endl;
+  // std::cout << "mem:  t:" << tot << "  f:" << free << "  u:" << tot-free << "\n";
   
   group_count = 0;
   std::vector<std::vector<Acts::Seed<SpacePoint>>> seedVector_cuda;
@@ -499,6 +499,8 @@ int proc(Work &w) {
       }
     }
   }
+
+  ACTS_CUDA_ERROR_CHECK( cudaFreeHost( sch ) );
 
   //  auto end_cuda = std::chrono::system_clock::now();
   auto end_cuda = std::chrono::high_resolution_clock::now();

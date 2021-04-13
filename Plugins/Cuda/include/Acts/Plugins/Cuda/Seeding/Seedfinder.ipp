@@ -181,8 +181,8 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   }
 
 
-  ACTS_CUDA_ERROR_CHECK(cudaMemcpy(sfd, &sfh, sizeof(GPUStructs::Flatten),
-                                        cudaMemcpyHostToDevice));
+  ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(sfd, &sfh, sizeof(GPUStructs::Flatten),
+                                        cudaMemcpyHostToDevice,w.stream));
   
   // CudaMatrix<float> spMmat_cuda(nSpM, 6, &spMmat_cpu, &w.stream);
   // CudaMatrix<float> spBmat_cuda(nSpB, 6, &spBmat_cpu, &w.stream);

@@ -32,9 +32,9 @@ class CudaMatrix {
     m_setSize(nRows, nCols);
     ACTS_CUDA_ERROR_CHECK(
         cudaMalloc((var_t**)&m_devPtr, m_size * sizeof(var_t)));
-    zeros();
+    //    zeros();
   }
-  CudaMatrix(size_t nRows, size_t nCols, cudaStream_t* s, int dev=0):m_stream(s),m_devID(0) {
+  CudaMatrix(size_t nRows, size_t nCols, cudaStream_t* s, int dev=0):m_stream(s),m_devID(dev) {
     m_setSize(nRows, nCols);
     //    ACTS_CUDA_ERROR_CHECK(cudaMallocAsync((var_t**)&m_devPtr, m_size * sizeof(var_t), *m_stream));
     m_devPtr = (var_t*) cms::cuda::allocate_device(m_devID, m_size*sizeof(var_t), *m_stream);
