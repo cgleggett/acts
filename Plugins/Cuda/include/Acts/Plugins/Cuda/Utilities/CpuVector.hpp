@@ -9,6 +9,7 @@
 #pragma once
 
 #include "Acts/Plugins/Cuda/Utilities/CudaVector.cu"
+#include "Acts/Plugins/Cuda/Utilities/CUDACore/allocate_host.h"
 
 #include <cstring>
 
@@ -21,34 +22,37 @@ template <typename var_t>
 class CpuVector {
  public:
   CpuVector() = delete;
-  CpuVector(size_t size, cudaStream_t*s, bool pinned = 1):m_stream(s) {
+  CpuVector(size_t size, cudaStream_t*s):m_stream(s) {
     m_size = size;
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[m_size];
-    } else if (pinned == 1) {
-      cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
-    }
+    // m_pinned = pinned;
+    // if (pinned == 0) {
+    //   m_hostPtr = new var_t[m_size];
+    // } else if (pinned == 1) {
+    //   cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
+    // }
+    m_hostPtr = (var_t*) cms::cuda::allocate_host(m_size*sizeof(var_t), *m_stream);
   }
 
-  CpuVector(size_t size, CudaVector<var_t>* cuVec, cudaStream_t* s, bool pinned = 1):m_stream(s) {
+  CpuVector(size_t size, CudaVector<var_t>* cuVec, cudaStream_t* s):m_stream(s) {
     m_size = size;
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[m_size];
-    } else if (pinned == 1) {
-      cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
-    }
+    // m_pinned = pinned;
+    // if (pinned == 0) {
+    //   m_hostPtr = new var_t[m_size];
+    // } else if (pinned == 1) {
+    //   cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
+    // }
+    m_hostPtr = (var_t*) cms::cuda::allocate_host(m_size*sizeof(var_t), *m_stream);
     cudaMemcpyAsync(m_hostPtr, cuVec->get(), m_size * sizeof(var_t),
                     cudaMemcpyDeviceToHost, *m_stream);
   }
 
   ~CpuVector() {
-    if (!m_pinned) {
-      delete m_hostPtr;
-    } else if (m_pinned && m_hostPtr) {
-      cudaFreeHost(m_hostPtr);
-    }
+    // if (!m_pinned) {
+    //   delete m_hostPtr;
+    // } else if (m_pinned && m_hostPtr) {
+    //   cudaFreeHost(m_hostPtr);
+    // }
+    cms::cuda::free_host(m_hostPtr);    
   }
 
   var_t* get(size_t offset = 0) { return m_hostPtr + offset; }

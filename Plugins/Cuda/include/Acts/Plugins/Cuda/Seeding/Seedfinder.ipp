@@ -299,7 +299,8 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   nTrplPerSpM_cuda.zeros();
   CudaMatrix<Triplet> TripletsPerSpM_cuda(nTrplPerSpMLimit,
                                           *nSpMcomp_cpu.get(), &w.stream);
-  CpuVector<int> nTrplPerSpM_cpu(*nSpMcomp_cpu.get(), &w.stream, true);
+  //  CpuVector<int> nTrplPerSpM_cpu(*nSpMcomp_cpu.get(), &w.stream, true);
+  CpuVector<int> nTrplPerSpM_cpu(*nSpMcomp_cpu.get(), &w.stream);
   nTrplPerSpM_cpu.zeros();
   CpuMatrix<Triplet> TripletsPerSpM_cpu(nTrplPerSpMLimit, *nSpMcomp_cpu.get(),
                                         true);
