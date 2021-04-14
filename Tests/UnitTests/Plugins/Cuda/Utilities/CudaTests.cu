@@ -34,7 +34,9 @@ __global__ void MatrixLoadStore2(const Eigen::Matrix<AFloat, row, col>* input,
 BOOST_AUTO_TEST_SUITE(Utilities)
 BOOST_AUTO_TEST_CASE(CUDAOBJ_TEST) {
   // Profiler
+  cudaStream_t s;
   cudaProfilerStart();
+  cudaStreamCreate(&s);
 
   using AFloat = float;
 
@@ -57,15 +59,15 @@ BOOST_AUTO_TEST_CASE(CUDAOBJ_TEST) {
   }
 
   CudaVector<Eigen::Matrix<AFloat, vecDim, 1>> inMat1_cuda(bufSize, inMat1_cpu,
-                                                           bufSize, 0);
-  CudaVector<Eigen::Matrix<AFloat, vecDim, 1>> outMat1_cuda(bufSize);
+                                                           bufSize, 0, &s);
+  CudaVector<Eigen::Matrix<AFloat, vecDim, 1>> outMat1_cuda(bufSize, &s);
 
   MatrixLoadStore1<AFloat, vecDim, 1>
       <<<gridSize, blockSize>>>(inMat1_cuda.get(), outMat1_cuda.get());
   ACTS_CUDA_ERROR_CHECK(cudaGetLastError());
 
   CpuVector<Eigen::Matrix<AFloat, vecDim, 1>> outMat1_cpu(bufSize,
-                                                          &outMat1_cuda);
+                                                          &outMat1_cuda, &s);
 
   // Case 2) For aligned memory access
   // global memory load/store efficiency ~ 100%
@@ -79,8 +81,8 @@ BOOST_AUTO_TEST_CASE(CUDAOBJ_TEST) {
   }
 
   CudaVector<Eigen::Matrix<AFloat, vecDim, nVec>> inMat2_cuda(
-      bufSize, inMat2_cpu, bufSize, 0);
-  CudaVector<Eigen::Matrix<AFloat, vecDim, nVec>> outMat2_cuda(bufSize);
+                                                              bufSize, inMat2_cpu, bufSize, 0, &s);
+  CudaVector<Eigen::Matrix<AFloat, vecDim, nVec>> outMat2_cuda(bufSize, &s);
 
   MatrixLoadStore2<AFloat, vecDim, nVec>
       <<<gridSize, blockSize>>>(inMat2_cuda.get(), outMat2_cuda.get());
@@ -88,8 +90,9 @@ BOOST_AUTO_TEST_CASE(CUDAOBJ_TEST) {
   ACTS_CUDA_ERROR_CHECK(cudaGetLastError());
 
   CpuVector<Eigen::Matrix<AFloat, vecDim, nVec>> outMat2_cpu(bufSize,
-                                                             &outMat2_cuda);
+                                                             &outMat2_cuda,&s);
 
+  cudaStreamDestroy(s);
   cudaProfilerStop();
 
   for (int i = 0; i < nVec; i++) {

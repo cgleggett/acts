@@ -9,6 +9,8 @@
 #pragma once
 
 #include "Acts/Plugins/Cuda/Utilities/CudaScalar.cu"
+#include "Acts/Plugins/Cuda/Utilities/CUDACore/allocate_host.h"
+
 
 namespace Acts {
 
@@ -18,63 +20,20 @@ class CudaScalar;
 template <typename var_t>
 class CpuScalar {
  public:
-  CpuScalar(bool pinned = 0) {
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[1];
-    } else if (pinned == 1) {
-      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
-    }
-  }
-
-  CpuScalar(CudaScalar<var_t>* cuScalar, bool pinned = 0) {
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[1];
-    } else if (pinned == 1) {
-      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
-    }
-    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_hostPtr, cuScalar->get(), sizeof(var_t),
-                                     cudaMemcpyDeviceToHost));
-  }
-  CpuScalar(CudaScalar<var_t>* cuScalar, cudaStream_t* s, bool pinned = 0):m_stream(s) {
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[1];
-    } else if (pinned == 1) {
-      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
-    }
+  CpuScalar(CudaScalar<var_t>* cuScalar, cudaStream_t* s):m_stream(s) {
+    m_hostPtr = (var_t*) cms::cuda::allocate_host(sizeof(var_t), *m_stream);
     ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_hostPtr, cuScalar->get(), sizeof(var_t),
                                           cudaMemcpyDeviceToHost,*m_stream));
   }
 
-  CpuScalar(var_t* cuScalar, bool pinned = 0) {
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[1];
-    } else if (pinned == 1) {
-      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
-    }
-    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_hostPtr, cuScalar, sizeof(var_t),
-                                     cudaMemcpyDeviceToHost));
-  }
-  CpuScalar(var_t* cuScalar, cudaStream_t* s, bool pinned = 0):m_stream(s) {
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[1];
-    } else if (pinned == 1) {
-      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
-    }
+  CpuScalar(var_t* cuScalar, cudaStream_t* s):m_stream(s) {
+    m_hostPtr = (var_t*) cms::cuda::allocate_host(sizeof(var_t), *m_stream);
     ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_hostPtr, cuScalar, sizeof(var_t),
                                           cudaMemcpyDeviceToHost, *m_stream));
   }
 
   ~CpuScalar() {
-    if (!m_pinned) {
-      delete m_hostPtr;
-    } else if (m_pinned && m_hostPtr) {
-      ACTS_CUDA_ERROR_CHECK(cudaFreeHost(m_hostPtr));
-    }
+    cms::cuda::free_host(m_hostPtr);
   }
 
   var_t* get() { return m_hostPtr; }
@@ -84,7 +43,6 @@ class CpuScalar {
  private:
   var_t* m_hostPtr {nullptr};
   size_t m_size;
-  bool m_pinned;
   cudaStream_t* m_stream{nullptr};
 };
 

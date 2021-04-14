@@ -39,16 +39,19 @@ BOOST_AUTO_TEST_CASE(CUDAOBJ_TEST) {
     inMat_cpu[i] = Eigen::Matrix<float, vecDim, nVec>::Random();
   }
 
+  cudaStream_t s;
   cudaProfilerStart();
+  cudaStreamCreate(&s);
 
   CudaVector<Eigen::Matrix<float, vecDim, nVec>> inMat_cuda(bufSize, inMat_cpu,
-                                                            bufSize, 0);
+                                                            bufSize, 0, &s);
   CudaVector<Eigen::Matrix<float, vecDim, nVec>> outMat_cuda(bufSize);
   MatrixLoadStore<float, vecDim, nVec>
       <<<gridSize, blockSize>>>(inMat_cuda.get(), outMat_cuda.get());
   CpuVector<Eigen::Matrix<float, vecDim, nVec>> outMat_cpu(bufSize,
-                                                           &outMat_cuda);
+                                                           &outMat_cuda, &s);
 
+  cudaStreamDestroy(s);
   cudaProfilerStop();
 
   BOOST_REQUIRE(inMat_cpu[0] == *outMat_cpu.get(0));

@@ -247,12 +247,13 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   //                                       cudaMemcpyDeviceToHost,w.stream));
 
   
-  CpuScalar<int> nSpMcomp_cpu(&nSpMcomp_cuda);
-  CpuScalar<int> nSpBcompPerSpMMax_cpu(&nSpBcompPerSpMMax_cuda);
-  CpuScalar<int> nSpTcompPerSpMMax_cpu(&nSpTcompPerSpMMax_cuda);
-  CpuVector<int> nSpBcompPerSpM_cpu(nSpM, &nSpBcompPerSpM_cuda);
-  CpuVector<int> nSpTcompPerSpM_cpu(nSpM, &nSpTcompPerSpM_cuda);
-  CpuVector<int> McompIndex_cpu(nSpM, &McompIndex_cuda);
+  CpuScalar<int> nSpMcomp_cpu(&nSpMcomp_cuda, &w.stream);
+  CpuScalar<int> nSpBcompPerSpMMax_cpu(&nSpBcompPerSpMMax_cuda, &w.stream);
+  CpuScalar<int> nSpTcompPerSpMMax_cpu(&nSpTcompPerSpMMax_cuda, &w.stream);
+  CpuVector<int> nSpBcompPerSpM_cpu(nSpM, &nSpBcompPerSpM_cuda, &w.stream);
+  CpuVector<int> nSpTcompPerSpM_cpu(nSpM, &nSpTcompPerSpM_cuda, &w.stream);
+  CpuVector<int> McompIndex_cpu(nSpM, &McompIndex_cuda, &w.stream);
+  cudaStreamSynchronize(w.stream);
 
   //--------------------------------------
   //  Algorithm 2. Transform coordinate
@@ -292,14 +293,13 @@ Seedfinder<external_spacepoint_t, Acts::Cuda>::createSeedsForGroup(
   CudaScalar<int> nTrplPerSpMLimit_cuda(&nTrplPerSpMLimit, &w.stream);
 
   CudaScalar<int> nTrplPerSpBLimit_cuda(&m_config.nTrplPerSpBLimit, &w.stream);
-  CpuScalar<int> nTrplPerSpBLimit_cpu(
-      &nTrplPerSpBLimit_cuda);  // need to be USM
+  CpuScalar<int> nTrplPerSpBLimit_cpu(&nTrplPerSpBLimit_cuda, &w.stream);  // need to be USM
 
   CudaVector<int> nTrplPerSpM_cuda(*nSpMcomp_cpu.get(), &w.stream);
   nTrplPerSpM_cuda.zeros();
   CudaMatrix<Triplet> TripletsPerSpM_cuda(nTrplPerSpMLimit,
                                           *nSpMcomp_cpu.get(), &w.stream);
-  CpuVector<int> nTrplPerSpM_cpu(*nSpMcomp_cpu.get(), true);
+  CpuVector<int> nTrplPerSpM_cpu(*nSpMcomp_cpu.get(), &w.stream, true);
   nTrplPerSpM_cpu.zeros();
   CpuMatrix<Triplet> TripletsPerSpM_cpu(nTrplPerSpMLimit, *nSpMcomp_cpu.get(),
                                         true);
