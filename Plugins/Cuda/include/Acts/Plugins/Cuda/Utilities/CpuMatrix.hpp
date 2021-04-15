@@ -9,6 +9,7 @@
 #pragma once
 
 #include "Acts/Plugins/Cuda/Utilities/CudaMatrix.cu"
+#include "Acts/Plugins/Cuda/Utilities/CUDACore/allocate_host.h"
 
 // column-major style Matrix Definition
 
@@ -21,35 +22,38 @@ template <typename var_t>
 class CpuMatrix {
  public:
   CpuMatrix() = delete;
-  CpuMatrix(size_t nRows, size_t nCols, bool pinned = 0) {
+  CpuMatrix(size_t nRows, size_t nCols, cudaStream_t* s): m_stream(s) {
     m_setSize(nRows, nCols);
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[m_size];
-    } else if (pinned == 1) {
-      cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
-    }
+    m_hostPtr = (var_t*) cms::cuda::allocate_host(m_size*sizeof(var_t), *m_stream);
+    // m_pinned = pinned;
+    // if (pinned == 0) {
+    //   m_hostPtr = new var_t[m_size];
+    // } else if (pinned == 1) {
+    //   cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
+    // }
   }
 
-  CpuMatrix(size_t nRows, size_t nCols, CudaMatrix<var_t>* cuMat,
-            bool pinned = 0) {
+  CpuMatrix(size_t nRows, size_t nCols, CudaMatrix<var_t>* cuMat, cudaStream_t* s
+            ):m_stream(s) {
     m_setSize(nRows, nCols);
-    m_pinned = pinned;
-    if (pinned == 0) {
-      m_hostPtr = new var_t[m_size];
-    } else if (pinned == 1) {
-      cudaMallocHost(&m_hostPtr, m_nRows * m_nCols * sizeof(var_t));
-    }
-    cudaMemcpy(m_hostPtr, cuMat->get(0, 0), m_size * sizeof(var_t),
-               cudaMemcpyDeviceToHost);
+    // m_pinned = pinned;
+    // if (pinned == 0) {
+    //   m_hostPtr = new var_t[m_size];
+    // } else if (pinned == 1) {
+    //   cudaMallocHost(&m_hostPtr, m_nRows * m_nCols * sizeof(var_t));
+    // }
+    m_hostPtr = (var_t*) cms::cuda::allocate_host(m_size*sizeof(var_t), *m_stream);
+    cudaMemcpyAsync(m_hostPtr, cuMat->get(0, 0), m_size * sizeof(var_t),
+                    cudaMemcpyDeviceToHost, *m_stream);
   }
 
   ~CpuMatrix() {
-    if (!m_pinned) {
-      delete m_hostPtr;
-    } else if (m_pinned && m_hostPtr) {
-      cudaFreeHost(m_hostPtr);
-    }
+    // if (!m_pinned) {
+    //   delete m_hostPtr;
+    // } else if (m_pinned && m_hostPtr) {
+    //   cudaFreeHost(m_hostPtr);
+    // }
+    cms::cuda::free_host(m_hostPtr);    
   }
 
   var_t* get(size_t row = 0, size_t col = 0) {
@@ -75,11 +79,12 @@ class CpuMatrix {
   void zeros() { memset(m_hostPtr, 0, m_size * sizeof(var_t)); }
 
  private:
-  var_t* m_hostPtr = nullptr;
+  cudaStream_t* m_stream {nullptr};
+  var_t* m_hostPtr { nullptr };
   size_t m_nCols;
   size_t m_nRows;
   size_t m_size;
-  bool m_pinned;
+  //  bool m_pinned;
 
   void m_setSize(size_t row, size_t col) {
     m_nRows = row;
