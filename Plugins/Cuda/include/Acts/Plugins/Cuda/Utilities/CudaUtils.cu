@@ -9,6 +9,7 @@
 #pragma once
 
 #include <iostream>
+#include <stdexcept>
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -20,6 +21,7 @@ inline void cudaAssert(cudaError_t code, const char *file, int line,
   if (code != cudaSuccess) {
     fprintf(stderr, "CUDAassert: %s %s %d\n", cudaGetErrorString(code), file,
             line);
+    throw std::runtime_error(cudaGetErrorString(code));
     if (abort)
       exit(code);
   }

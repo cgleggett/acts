@@ -30,6 +30,15 @@ class CpuVector {
       cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
     }
   }
+  CpuVector(size_t size, cudaStream_t* s, bool pinned = 0):m_stream(s) {
+    m_size = size;
+    m_pinned = pinned;
+    if (pinned == 0) {
+      m_hostPtr = new var_t[m_size];
+    } else if (pinned == 1) {
+      cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
+    }
+  }
 
   CpuVector(size_t size, CudaVector<var_t>* cuVec, bool pinned = 0) {
     m_size = size;
@@ -41,6 +50,17 @@ class CpuVector {
     }
     cudaMemcpy(m_hostPtr, cuVec->get(), m_size * sizeof(var_t),
                cudaMemcpyDeviceToHost);
+  }
+  CpuVector(size_t size, CudaVector<var_t>* cuVec, cudaStream_t* s, bool pinned = 0):m_stream(s) {
+    m_size = size;
+    m_pinned = pinned;
+    if (pinned == 0) {
+      m_hostPtr = new var_t[m_size];
+    } else if (pinned == 1) {
+      cudaMallocHost(&m_hostPtr, m_size * sizeof(var_t));
+    }
+    cudaMemcpyAsync(m_hostPtr, cuVec->get(), m_size * sizeof(var_t),
+                    cudaMemcpyDeviceToHost, *m_stream);
   }
 
   ~CpuVector() {
@@ -56,11 +76,16 @@ class CpuVector {
   void set(size_t offset, var_t val) { m_hostPtr[offset] = val; }
 
   void copyD2H(var_t* devPtr, size_t len, size_t offset) {
-    cudaMemcpy(m_hostPtr + offset, devPtr, len * sizeof(var_t),
-               cudaMemcpyDeviceToHost);
+    if (m_stream) {
+      cudaMemcpyAsync(m_hostPtr + offset, devPtr, len * sizeof(var_t),
+                      cudaMemcpyDeviceToHost, *m_stream);
+    } else {
+      cudaMemcpy(m_hostPtr + offset, devPtr, len * sizeof(var_t),
+                 cudaMemcpyDeviceToHost);
+    }
   }
 
-  void copyD2H(var_t* devPtr, size_t len, size_t offset, cudaStream_t* stream) {
+  void copyD2H(var_t* devPtr, size_t len, size_t offset, cudaStream_t* stream) {    
     cudaMemcpyAsync(m_hostPtr + offset, devPtr, len * sizeof(var_t),
                     cudaMemcpyDeviceToHost, *stream);
   }
@@ -71,6 +96,7 @@ class CpuVector {
   var_t* m_hostPtr = nullptr;
   size_t m_size;
   bool m_pinned;
+  cudaStream_t *m_stream{nullptr};
 };
 
 }  // namespace Acts

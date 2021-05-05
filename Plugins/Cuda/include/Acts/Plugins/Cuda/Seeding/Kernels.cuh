@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include <cuda_runtime.h>
+#include "Work.hpp"
 
 typedef struct {
   int bIndex;
@@ -32,7 +33,7 @@ void searchDoublet(const dim3 grid, const dim3 block, const int* nSpM,
                    int* nSpBcompPerSpM_Max, int* nSpTcompPerSpM_Max,
                    int* nSpBcompPerSpM, int* nSpTcompPerSpM, int* McompIndex,
                    int* BcompIndex, int* tmpBcompIndex, int* TcompIndex,
-                   int* tmpTcompIndex);
+                   int* tmpTcompIndex, Work& w);
 
 void transformCoordinate(const dim3 grid, const dim3 block, const int* nSpM,
                          const float* spMmat, const int* McompIndex,
@@ -42,7 +43,7 @@ void transformCoordinate(const dim3 grid, const dim3 block, const int* nSpM,
                          const int* nSpTcompPerSpM_Max, const int* TcompIndex,
                          float* spMcompMat, float* spBcompMatPerSpM,
                          float* circBcompMatPerSpM, float* spTcompMatPerSpM,
-                         float* circTcompMatPerSpM);
+                         float* circTcompMatPerSpM, Work& w);
 
 void searchTriplet(
     const dim3 grid, const dim3 block, const int* nSpTcompPerSpM_cpu,
@@ -58,5 +59,5 @@ void searchTriplet(
     const float* deltaInvHelixDiameter, const float* impactWeightFactor,
     const float* deltaRMin, const float* compatSeedWeight,
     const size_t* compatSeedLimit_cpu, const size_t* compatSeedLimit_cuda,
-    int* nTrplPerSpM, Triplet* TripletsPerSpM, cudaStream_t* stream);
+    int* nTrplPerSpM, Triplet* TripletsPerSpM, Work& w);
 }  // namespace Acts

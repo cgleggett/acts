@@ -18,25 +18,44 @@ class CudaScalar;
 template <typename var_t>
 class CpuScalar {
  public:
-  CpuScalar(bool pinned = 0) {
-    m_pinned = pinned;
-    if (pinned == 0) {
+  CpuScalar(bool pin=false):m_pinned(pin) {
+    if (!m_pinned) {
       m_hostPtr = new var_t[1];
-    } else if (pinned == 1) {
-      cudaMallocHost(&m_hostPtr, sizeof(var_t));
+    } else {
+      ACTS_CUDA_ERROR_CHECK(cudaMallocHost(&m_hostPtr, sizeof(var_t)));
     }
   }
 
-  CpuScalar(CudaScalar<var_t>* cuScalar, bool pinned = 0) {
-    m_pinned = pinned;
-    if (pinned == 0) {
+  CpuScalar(CudaScalar<var_t>* cuScalar, bool pin=false): m_pinned(pin) {
+    if (!m_pinned) {
       m_hostPtr = new var_t[1];
-    } else if (pinned == 1) {
+    } else {
       cudaMallocHost(&m_hostPtr, sizeof(var_t));
     }
-    cudaMemcpy(m_hostPtr, cuScalar->get(), sizeof(var_t),
-               cudaMemcpyDeviceToHost);
+    ACTS_CUDA_ERROR_CHECK(cudaMemcpy(m_hostPtr, cuScalar->get(), sizeof(var_t),
+                                     cudaMemcpyDeviceToHost));
   }
+
+  CpuScalar(CudaScalar<var_t>* cuScalar, cudaStream_t* s, bool pin=false):m_pinned(pin),m_stream(s) {
+    if (! m_pinned) {
+      m_hostPtr = new var_t[1];
+    } else {
+      cudaMallocHost(&m_hostPtr, sizeof(var_t));
+    }
+    ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_hostPtr, cuScalar->get(), sizeof(var_t),
+                                          cudaMemcpyDeviceToHost, *m_stream));
+
+  }
+  CpuScalar(var_t* cuScalar, cudaStream_t* s, bool p=false):m_pinned(p),m_stream(s) {
+    if (m_pinned) {
+      cudaMallocHost(&m_hostPtr, sizeof(var_t));
+    } else {
+      m_hostPtr = new var_t[1];
+    }
+    ACTS_CUDA_ERROR_CHECK(cudaMemcpyAsync(m_hostPtr, cuScalar, sizeof(var_t),
+                                          cudaMemcpyDeviceToHost, *m_stream));
+  }
+
 
   ~CpuScalar() {
     if (!m_pinned) {
@@ -53,7 +72,8 @@ class CpuScalar {
  private:
   var_t* m_hostPtr = nullptr;
   size_t m_size;
-  bool m_pinned;
+  bool m_pinned {false};
+  cudaStream_t* m_stream{nullptr};
 };
 
 }  // namespace Acts
